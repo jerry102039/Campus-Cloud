@@ -130,6 +130,8 @@ class ModelClient:
         extra_body: dict = {"top_k": top_k, "min_p": min_p, "repetition_penalty": repetition_penalty}
         extra_body.update(kwargs)
 
+        stream_options = kwargs.pop("stream_options", None)
+
         response = self._sync_client.chat.completions.create(
             model=self.model_name,
             messages=messages,
@@ -138,6 +140,7 @@ class ModelClient:
             top_p=top_p,
             presence_penalty=presence_penalty,
             stream=stream,
+            stream_options=stream_options,
             extra_body=extra_body,
         )
         return response
@@ -626,6 +629,8 @@ class ModelClient:
         extra_body: dict = {"top_k": top_k, "min_p": min_p, "repetition_penalty": repetition_penalty}
         extra_body.update(kwargs)
 
+        stream_options = kwargs.pop("stream_options", None)
+
         response = await self._async_client.chat.completions.create(
             model=self.model_name,
             messages=messages,
@@ -634,6 +639,7 @@ class ModelClient:
             top_p=top_p,
             presence_penalty=presence_penalty,
             stream=stream,
+            stream_options=stream_options,
             extra_body=extra_body,
         )
         return response

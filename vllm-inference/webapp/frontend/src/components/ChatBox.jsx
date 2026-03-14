@@ -213,6 +213,15 @@ const ChatBox = ({ modelInfo }) => {
             continue
           }
 
+          if (data.startsWith('[STATS]')) {
+            try {
+              const stats = JSON.parse(data.slice(8))
+              const footer = `\n\n> 📊 **統計**: 耗時 ${stats.time}s \u00b7 生成 ${stats.completion_tokens} tokens \u00b7 速度 ${stats.tps} tokens/s\n\n`
+              setCurrentResponse(prev => prev + footer)
+            } catch(e) { /* ignore parse errors */ }
+            continue
+          }
+
           try {
              if (data.startsWith('"')) {
                 data = JSON.parse(data)
@@ -371,256 +380,241 @@ const ChatBox = ({ modelInfo }) => {
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className={`glass-strong rounded-3xl p-8 shadow-2xl card-glow transition-all duration-300 ${
-        isDragging ? 'border-4 border-primary-400 bg-primary-500/30 scale-[1.02]' : ''
+      className={`flex flex-col h-full relative transition-colors duration-200 ${
+        isDragging ? 'bg-gray-50' : 'bg-white'
       }`}
     >
       {/* 拖放提示覆蓋層 */}
       {isDragging && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary-900/80 backdrop-blur-sm rounded-3xl">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-sm">
           <div className="text-center space-y-4">
-            <Upload className="w-20 h-20 mx-auto text-primary-300 animate-bounce" />
-            <p className="text-2xl font-bold text-white">放開以上傳檔案</p>
-            <p className="text-primary-200">支援圖片（JPG、PNG、WebP）</p>
-            <p className="text-primary-200">支援影片（MP4、MOV、AVI）</p>
-            <p className="text-primary-200">支援文件（DOCX、PDF、TXT、MD）</p>
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Upload className="w-8 h-8 text-gray-400" />
+            </div>
+            <p className="text-xl font-medium text-gray-900">放開以上傳檔案</p>
+            <p className="text-sm text-gray-500">支援圖片, 影片, 與文件檔案</p>
           </div>
         </div>
       )}
 
       {/* 對話顯示區 */}
-      <div className="min-h-[450px] max-h-[650px] overflow-y-auto custom-scrollbar mb-8 space-y-6 px-2">
-        {!lastUserMessage && !currentResponse && (
-          <div className="flex items-center justify-center h-full text-primary-200/60">
-            <div className="text-center space-y-6">
-              <div className="relative">
-                <Loader2 className="w-20 h-20 mx-auto animate-spin text-primary-300/50" />
-                <div className="absolute inset-0 w-20 h-20 mx-auto animate-ping text-primary-400/30">
-                  <Loader2 className="w-20 h-20" />
+      <div className="flex-1 overflow-y-auto custom-scrollbar w-full">
+        <div className="max-w-5xl mx-auto px-4 pt-8 pb-40 space-y-8">
+          {!lastUserMessage && !currentResponse && (
+            <div className="flex items-center justify-center mt-32 text-gray-400">
+              <div className="text-center space-y-4 max-w-sm">
+                <div className="w-12 h-12 bg-gray-50 border border-gray-100 rounded-2xl flex flex-col items-center justify-center mx-auto mb-6 shadow-sm">
+                   <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
                 </div>
+                <p className="text-lg font-medium text-gray-700">準備就緒</p>
+                <p className="text-sm text-gray-500 leading-relaxed">
+                  描述您的問題或任務。{modelInfo.is_image_capable && '您也可以上傳或拖放文件、圖片與影片進行分析。'}
+                </p>
               </div>
-              <p className="text-xl font-medium">開始你的魔法對話吧 ✨</p>
-              {modelInfo.is_image_capable && (
-                <div className="space-y-2">
-                  <p className="text-base text-primary-300">支援圖片 & 影片分析 🎬</p>
-                  <p className="text-sm text-primary-400/60">可直接拖放圖片 / 影片到此區域</p>
+            </div>
+          )}
+
+          {lastUserMessage && (
+            <MessageBubble
+              type="user"
+              text={lastUserMessage.text}
+              image={lastUserMessage.image}
+              document={lastUserMessage.document}
+              video={lastUserMessage.video}
+            />
+          )}
+
+          {currentResponse && (
+            <MessageBubble
+              type="assistant"
+              text={currentResponse}
+              isStreaming={isStreaming}
+            />
+          )}
+          
+          <div ref={responseEndRef} className="h-4" />
+        </div>
+      </div>
+
+      {/* 輸入區 (固定於底部) */}
+      <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-white via-white/95 to-transparent pt-10 pb-6 px-4 shrink-0 pointer-events-none z-10">
+        <div className="max-w-4xl mx-auto w-full flex flex-col pointer-events-auto">
+          <div className="w-full bg-gray-50 border border-gray-200 rounded-3xl p-3 focus-within:ring-1 focus-within:ring-gray-300 focus-within:bg-white transition-all shadow-lg">
+          {/* 預覽區域 */}
+          {(videoPreview || imagePreview || documentName) && (
+            <div className="flex gap-3 mb-3 px-2 pt-1 overflow-x-auto custom-scrollbar">
+              {/* 影片預覽 */}
+              {videoPreview && (
+                <div className="relative inline-block group shrink-0">
+                  <div className="relative rounded-xl overflow-hidden border border-gray-200 w-24 h-24 bg-black">
+                    <video
+                      src={videoPreview}
+                      className="w-full h-full object-cover opacity-80"
+                      muted
+                      playsInline
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Video className="w-6 h-6 text-white opacity-70" />
+                    </div>
+                  </div>
+                  <button
+                    onClick={removeVideo}
+                    className="absolute -top-2 -right-2 p-1 bg-white border border-gray-200 rounded-full text-gray-500 hover:text-gray-900 shadow-sm"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* 圖片預覽 */}
+              {imagePreview && (
+                <div className="relative inline-block group shrink-0">
+                  <div className="relative rounded-xl overflow-hidden border border-gray-200 w-24 h-24 bg-gray-100">
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <button
+                    onClick={removeImage}
+                    className="absolute -top-2 -right-2 p-1 bg-white border border-gray-200 rounded-full text-gray-500 hover:text-gray-900 shadow-sm"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* 文件預覽 */}
+              {documentName && (
+                <div className="relative inline-block group shrink-0">
+                  <div className="relative rounded-xl border border-gray-200 bg-white p-3 flex flex-col items-center justify-center w-24 h-24 shadow-sm text-center">
+                    <FileText className="w-6 h-6 text-gray-400 mb-2" />
+                    <span className="text-xs text-gray-600 font-medium truncate w-full px-1" title={documentName}>
+                      {documentName}
+                    </span>
+                  </div>
+                  <button
+                    onClick={removeDocument}
+                    className="absolute -top-2 -right-2 p-1 bg-white border border-gray-200 rounded-full text-gray-500 hover:text-gray-900 shadow-sm"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {lastUserMessage && (
-          <MessageBubble
-            type="user"
-            text={lastUserMessage.text}
-            image={lastUserMessage.image}
-            document={lastUserMessage.document}
-            video={lastUserMessage.video}
-          />
-        )}
-
-        {currentResponse && (
-          <MessageBubble
-            type="assistant"
-            text={currentResponse}
-            isStreaming={isStreaming}
-          />
-        )}
-        
-        <div ref={responseEndRef} />
-      </div>
-
-      {/* 影片預覽 */}
-      {videoPreview && (
-        <div className="mb-6 relative inline-block group">
-          <div className="relative rounded-2xl overflow-hidden border-2 border-violet-400/50 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105">
-            <video
-              src={videoPreview}
-              className="max-w-[280px] max-h-[180px] object-cover"
-              muted
-              playsInline
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-            <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-              <Video className="w-4 h-4 text-white" />
-              <span className="text-white text-xs font-medium">{video?.name ?? '影片'}</span>
-            </div>
-          </div>
-          <button
-            onClick={removeVideo}
-            className="absolute -top-3 -right-3 p-2 bg-red-500 rounded-full text-white hover:bg-red-600 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 button-shine"
-            title="移除影片"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      )}
-
-      {/* 圖片預覽 */}
-      {imagePreview && (
-        <div className="mb-6 relative inline-block group">
-          <div className="relative rounded-2xl overflow-hidden border-2 border-primary-400/50 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105">
-            <img
-              src={imagePreview}
-              alt="Preview"
-              className="max-w-[250px] max-h-[250px] object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          </div>
-          <button
-            onClick={removeImage}
-            className="absolute -top-3 -right-3 p-2 bg-red-500 rounded-full text-white hover:bg-red-600 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 button-shine"
-            title="移除圖片"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      )}
-
-      {/* 文件預覽 */}
-      {documentName && (
-        <div className="mb-6 relative inline-block group">
-          <div className="relative rounded-2xl overflow-hidden border-2 border-cyan-400/50 bg-cyan-900/30 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 p-4 min-w-[250px]">
-            <div className="flex items-center gap-3">
-              <FileText className="w-10 h-10 text-cyan-300" />
-              <div className="flex-1">
-                <p className="text-white font-medium text-sm truncate max-w-[180px]" title={documentName}>
-                  {documentName}
-                </p>
-                <p className="text-cyan-300/60 text-xs mt-1">
-                  {documentName.endsWith('.docx') && 'Word 文件'}
-                  {documentName.endsWith('.pdf') && 'PDF 文件'}
-                  {documentName.endsWith('.txt') && '文字文件'}
-                  {documentName.endsWith('.md') && 'Markdown 文件'}
-                </p>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={removeDocument}
-            className="absolute -top-3 -right-3 p-2 bg-red-500 rounded-full text-white hover:bg-red-600 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 button-shine"
-            title="移除文件"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      )}
-
-      {/* 輸入區 */}
-      <div className="flex items-end gap-4">
-        <div className="flex-1 glass rounded-2xl p-5 space-y-4 hover:bg-white/25 transition-all duration-300">
+          {/* 輸入框主體 */}
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={              video ? '描述你想了解這段影片的哪些內容...' :              image ? "描述你想了解的內容..." : 
+            placeholder={
+              video ? '描述你想了解這段影片的哪些內容...' : 
+              image ? "描述你想了解的內容..." : 
               document ? "請問關於這份文件的問題..." : 
-              "輸入訊息...按 Enter 發送"
+              "發送訊息..."
             }
-            className="w-full bg-transparent text-white placeholder-primary-300/60 resize-none focus:outline-none text-base leading-relaxed"
-            rows={3}
+            className="w-full bg-transparent text-gray-900 placeholder-gray-500 resize-none focus:outline-none text-[15px] leading-relaxed px-3 py-1 mb-2 max-h-32 custom-scrollbar overflow-y-auto"
+            rows={Math.min(5, Math.max(1, message.split('\n').length))}
             disabled={isStreaming}
           />
           
-          <div className="flex items-center gap-3 pt-2 border-t border-white/10">
-            {/* 文件上傳 */}
-            <input
-              ref={documentInputRef}
-              type="file"
-              accept=".docx,.pdf,.txt,.md"
-              onChange={handleDocumentSelect}
-              className="hidden"
-              disabled={isStreaming}
-            />
-            <button
-              onClick={() => documentInputRef.current?.click()}
-              disabled={isStreaming}
-              className="group px-5 py-2.5 glass rounded-xl text-primary-200 hover:bg-white/30 transition-all duration-300 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg button-shine"
-              title="上傳文件（DOCX、PDF、TXT、MD）"
-            >
-              <Paperclip className="w-5 h-5 group-hover:scale-110 transition-transform duration-300" />
-              <span className="text-sm font-medium">上傳文件</span>
-            </button>
+          <div className="flex items-center justify-between px-2 pb-1">
+            <div className="flex items-center gap-1.5">
+              {/* 上傳附件選單 (簡化版) */}
+              <input
+                ref={documentInputRef}
+                type="file"
+                accept=".docx,.pdf,.txt,.md"
+                onChange={handleDocumentSelect}
+                className="hidden"
+                disabled={isStreaming}
+              />
+              <button
+                onClick={() => documentInputRef.current?.click()}
+                disabled={isStreaming}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                title="上傳文件"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
 
-            {/* 影片上傳（僅視覺模型） */}
-            {modelInfo.is_image_capable && (
-              <>
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/*"
-                  onChange={(e) => handleVideoSelect(e.target.files?.[0])}
-                  className="hidden"
-                  disabled={isStreaming}
-                />
-                <button
-                  onClick={() => videoInputRef.current?.click()}
-                  disabled={isStreaming}
-                  className="group px-5 py-2.5 glass rounded-xl text-primary-200 hover:bg-white/30 transition-all duration-300 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg button-shine"
-                  title="上傳影片"
-                >
-                  <Video className="w-5 h-5 group-hover:scale-110 transition-transform duration-300" />
-                  <span className="text-sm font-medium">上傳影片</span>
-                </button>
-              </>
-            )}
+              {modelInfo.is_image_capable && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                    disabled={isStreaming}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isStreaming}
+                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                    title="上傳圖片"
+                  >
+                    <ImageIcon className="w-5 h-5" />
+                  </button>
 
-            {/* 圖片上傳（僅視覺模型） */}
-            {modelInfo.is_image_capable && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageSelect}
-                  className="hidden"
-                  disabled={isStreaming}
-                />
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={(e) => handleVideoSelect(e.target.files?.[0])}
+                    className="hidden"
+                    disabled={isStreaming}
+                  />
+                  <button
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={isStreaming}
+                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                    title="上傳影片"
+                  >
+                    <Video className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* 發送與新對話區塊 */}
+            <div className="flex items-center gap-2">
+              {currentResponse && !isStreaming && (
                 <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isStreaming}
-                  className="group px-5 py-2.5 glass rounded-xl text-primary-200 hover:bg-white/30 transition-all duration-300 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg button-shine"
-                  title="上傳圖片"
+                  onClick={newChat}
+                  className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
                 >
-                  <ImageIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-300" />
-                  <span className="text-sm font-medium">上傳圖片</span>
+                  新對話
                 </button>
-              </>
-            )}
-            
-            <span className="text-xs text-primary-300/60">或直接拖放檔案</span>
+              )}
+              
+              <button
+                onClick={sendMessage}
+                disabled={(!message.trim() && !image && !document && !video) || isStreaming}
+                className="p-1.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
+                title="發送"
+              >
+                {isStreaming ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
-
-        {/* 發送按鈕 */}
-        <button
-          onClick={sendMessage}
-          disabled={(!message.trim() && !image && !document && !video) || isStreaming}
-          className="group p-5 bg-gradient-to-r from-primary-600 to-purple-600 rounded-2xl text-white hover:from-primary-500 hover:to-purple-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl hover:shadow-2xl cursor-pointer hover:scale-105 button-shine"
-          title={isStreaming ? "發送中..." : "發送訊息"}
-        >
-          {isStreaming ? (
-            <Loader2 className="w-7 h-7 animate-spin" />
-          ) : (
-            <Send className="w-7 h-7 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform duration-300" />
-          )}
-        </button>
-      </div>
-
-      {/* 新對話按鈕 */}
-      {currentResponse && !isStreaming && (
-        <div className="mt-6 text-center">
-          <button
-            onClick={newChat}
-            className="px-8 py-3 glass rounded-xl text-primary-200 hover:bg-white/30 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-xl hover:scale-105 button-shine font-medium"
-          >
-            ✨ 開始新對話
-          </button>
+          
+        {/* 底部資訊 */}
+        <div className="mt-3 text-center text-gray-400 text-xs w-full font-medium">
+          Powered by vLLM • 單次對話模式
         </div>
-      )}
+      </div>
     </div>
-  )
+  </div>
+)
 }
 
 export default ChatBox

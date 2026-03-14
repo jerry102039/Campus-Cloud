@@ -38,6 +38,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+SYSTEM_PROMPT = """<Role>
+你是一位具備頂尖解題能力、同時富有溫度的資深 AI 顧問。無論使用者提出日常閒聊、技術問題或是文本分析，你都能迅速切換心智模式，提供最符合情境的高品質解答。
+</Role>
+
+<Constraints>
+1. **防截斷與精煉原則**：你的首要防線是「完整表達」，永遠確保在 3000 字以內自然結束話題。若問題龐大，請給出【核心結論】後，詢問使用者是否需展開細節。
+2. **結構化呈現**：大量使用 Markdown 語法（粗體、區塊引用、列表）來強化層次。拒絕長篇無排版的文字牆結構。
+3. **無廢話開場**：切入正題，不需要「你好，我是 AI 助手」之類的無意義破冰語。
+4. **誠實與精確**：面對不懂的問題或缺乏工具連線時，不瞎編、不猜測，精確告知你的能力邊界，不要過度思考鬼打牆
+</Constraints>
+
+<Thinking_Process_Guidelines>
+- **禁止默寫規則**：絕對不要在思考過程中複誦或列出 Constraint Checklist（限制檢查表）。遇到限制或原則，請在心裡執行，不要寫出來。
+- **簡明扼要**：思考過程應專注於問題拆解、邏輯推演與計算。遇到一般閒聊或簡單問題時，請將思考過程縮減至 50 字以內，甚至一語帶過。
+- **保留額度**：你的主要任務是給出最終解答，請將大部分的 token 額度留給輸出給使用者的實際內容。
+</Thinking_Process_Guidelines>
+
+<Response_Strategy>
+- **遭遇一般提問**：直接給答案，若有選項請列點。
+- **遭遇程式/技術問題**：先給【結論與根因】，接着才提供【解決代碼與建議】。
+- **遭遇長文本/文件分析**：以【摘要】開頭，再進行【重點條列提取】。
+- **遭遇閒聊**：展現高 EQ 與幽默感，引導正面對話。
+- **用字遣詞**：使用繁體中文，不要使用簡體中文和emoji表情。
+</Response_Strategy>
+"""
+
 # ============================================================
 # Pydantic 模型
 # ============================================================
@@ -109,8 +135,13 @@ async def chat(request: ChatRequest) -> ChatResponse:
     文字聊天 (非流式)
     """
     try:
-        response = await client.achat_simple(
-            prompt=request.message,
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": request.message}
+        ]
+
+        response = await client.achat(
+            messages=messages,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
             top_p=request.top_p,
@@ -118,8 +149,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
             min_p=request.min_p,
             presence_penalty=request.presence_penalty,
             repetition_penalty=request.repetition_penalty,
+            stream=False,
         )
-        return ChatResponse(response=response)
+        return ChatResponse(response=response.choices[0].message.content or "")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -132,8 +164,13 @@ async def chat_stream(request: ChatRequest):
     """
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
-            async for chunk in client.achat_stream(
-                prompt=request.message,
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": request.message}
+            ]
+
+            stream = await client.achat(
+                messages=messages,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 top_p=request.top_p,
@@ -141,9 +178,31 @@ async def chat_stream(request: ChatRequest):
                 min_p=request.min_p,
                 presence_penalty=request.presence_penalty,
                 repetition_penalty=request.repetition_penalty,
-            ):
-                # SSE 格式: data: {content}\n\n (JSON Escape for robust newline handling)
-                yield f"data: {json.dumps(chunk)}\n\n"
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            
+            import time
+            start_time = time.time()
+            
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    delta = chunk.choices[0].delta.content
+                    # SSE 格式: data: {content}\n\n (JSON Escape for robust newline handling)
+                    yield f"data: {json.dumps(delta)}\n\n"
+                
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    elapsed = time.time() - start_time
+                    tokens = chunk.usage.completion_tokens
+                    tps = tokens / elapsed if elapsed > 0 else 0
+                    stats = {
+                        "prompt_tokens": chunk.usage.prompt_tokens,
+                        "completion_tokens": tokens,
+                        "total_tokens": chunk.usage.total_tokens,
+                        "tps": round(tps, 1),
+                        "time": round(elapsed, 2)
+                    }
+                    yield f"data: [STATS] {json.dumps(stats)}\n\n"
             
             # 結束標記
             yield "data: [DONE]\n\n"
@@ -194,7 +253,10 @@ async def chat_vision(
         )
         
         # 呼叫模型
-        messages = [{"role": "user", "content": content}]
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": content}
+        ]
         response = await client.achat(
             messages=messages,
             max_tokens=max_tokens,
@@ -241,19 +303,39 @@ async def chat_vision_stream(
             )
             
             # 呼叫模型
-            messages = [{"role": "user", "content": content}]
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": content}
+            ]
             stream = await client.achat(
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 stream=True,
+                stream_options={"include_usage": True},
             )
+            
+            import time
+            start_time = time.time()
             
             # 流式輸出
             async for chunk in stream:
-                delta = chunk.choices[0].delta.content
-                if delta:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    delta = chunk.choices[0].delta.content
                     yield f"data: {json.dumps(delta)}\n\n"
+                
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    elapsed = time.time() - start_time
+                    tokens = chunk.usage.completion_tokens
+                    tps = tokens / elapsed if elapsed > 0 else 0
+                    stats = {
+                        "prompt_tokens": chunk.usage.prompt_tokens,
+                        "completion_tokens": tokens,
+                        "total_tokens": chunk.usage.total_tokens,
+                        "tps": round(tps, 1),
+                        "time": round(elapsed, 2)
+                    }
+                    yield f"data: [STATS] {json.dumps(stats)}\n\n"
             
             yield "data: [DONE]\n\n"
         
@@ -334,13 +416,30 @@ async def chat_document_stream(
                 max_tokens=max_tokens,
                 temperature=temperature,
                 stream=True,
+                stream_options={"include_usage": True},
             )
+            
+            import time
+            start_time = time.time()
             
             # 流式輸出
             async for chunk in stream:
-                delta = chunk.choices[0].delta.content
-                if delta:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    delta = chunk.choices[0].delta.content
                     yield f"data: {json.dumps(delta)}\n\n"
+                    
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    elapsed = time.time() - start_time
+                    tokens = chunk.usage.completion_tokens
+                    tps = tokens / elapsed if elapsed > 0 else 0
+                    stats = {
+                        "prompt_tokens": chunk.usage.prompt_tokens,
+                        "completion_tokens": tokens,
+                        "total_tokens": chunk.usage.total_tokens,
+                        "tps": round(tps, 1),
+                        "time": round(elapsed, 2)
+                    }
+                    yield f"data: [STATS] {json.dumps(stats)}\n\n"
             
             yield "data: [DONE]\n\n"
         
@@ -450,14 +549,34 @@ async def chat_video_stream(
             except Exception:
                 pass  # 即使預檢失敗，仍繼續推論
 
+            # 組合 Message
+            # 因為 api/client.py 的 chat_with_video_stream 預期 text 參數直接是單純的字串 prompt，
+            # 若要傳遞 system prompt 給 client 的 achat_with_video_stream 比較困難，
+            # 我們可以直接將 system prompt 和 user prompt 結合成一段文字傳遞給 text 參數。
+            combined_message = f"{SYSTEM_PROMPT}\n\n用戶要求： {message}"
+
+            import time
+            start_time = time.time()
+            chunk_count = 0
+
             # 流式推論（單段直接流式 / 多段分部後流式彙整段）
             async for token in client.achat_with_video_stream(
-                text=message,
+                text=combined_message,
                 video_path=tmp_path,
                 max_tokens=max_tokens,
                 temperature=temperature,
             ):
+                chunk_count += 1
                 yield f"data: {json.dumps(token)}\n\n"
+
+            elapsed = time.time() - start_time
+            tps = chunk_count / elapsed if elapsed > 0 else 0
+            stats = {
+                "completion_tokens": chunk_count, # Estimated tokens for video stream
+                "tps": round(tps, 1),
+                "time": round(elapsed, 2)
+            }
+            yield f"data: [STATS] {json.dumps(stats)}\n\n"
 
             yield "data: [DONE]\n\n"
 
