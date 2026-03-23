@@ -103,6 +103,18 @@ def _strip_think_tags(text: str) -> str:
     return text.strip()
 
 
+def _apply_thinking_control(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Pass Qwen/vLLM thinking control through the OpenAI-compatible request.
+    When disabled, ask the model to skip reasoning output so responses return faster.
+    """
+    payload["chat_template_kwargs"] = {
+        **dict(payload.get("chat_template_kwargs") or {}),
+        "enable_thinking": settings.vllm_enable_thinking,
+    }
+    return payload
+
+
 async def generate_chat_reply(request: ChatRequest) -> ChatResponse:
     if not settings.vllm_model_name:
         raise HTTPException(status_code=503, detail="VLLM_MODEL_NAME is required for AI planning.")
@@ -125,6 +137,7 @@ Your primary objective is to clarify the user's infrastructure deployment needs 
 - **Platform Scope**: We only provision local on-premise Virtual Machines (VMs) and LXC containers for educational and research workloads. We DO NOT offer or recommend public clouds like AWS/GCP/Azure.
 - **Interaction Rules**: If the user's request is vague, ask 1 to 3 targeted clarifying questions to guide them smoothly. Do not overwhelm them with a massive wall of questions.
 - **Language Requirement**: Regardless of this prompt being in English, you MUST reply entirely in Traditional Chinese (zh-TW). Your tone should be encouraging, patient, and highly professional.
+- **Reasoning Visibility**: Do not expose chain-of-thought, internal reasoning, scratchpad, or `<think>` content. Return only the final user-facing answer.
 {greeting_instruction}
 - DO NOT generate JSON. Just chat normally.
 """
@@ -133,7 +146,7 @@ Your primary objective is to clarify the user's infrastructure deployment needs 
     for msg in request.messages:
         messages.append({"role": msg.role, "content": msg.content})
 
-    payload = {
+    payload = _apply_thinking_control({
         "model": settings.vllm_model_name,
         "messages": messages,
         "max_tokens": settings.vllm_chat_max_tokens,
@@ -142,7 +155,7 @@ Your primary objective is to clarify the user's infrastructure deployment needs 
         "top_k": settings.vllm_top_k,
         "min_p": settings.vllm_min_p,
         "repetition_penalty": settings.vllm_repetition_penalty,
-    }
+    })
     headers = {
         "Authorization": f"Bearer {settings.vllm_api_key}",
         "Content-Type": "application/json",
@@ -223,6 +236,7 @@ Analyze the conversation above. If there are conflicting statements, trust the L
 Prioritize "Primary User Signals" over assistant suggestions/questions.
 Consider the "Keyword Detection Hints" as potential needs, but you MUST evaluate the conversation context to determine if the user ACTUALLY still wants them. If the user used a negation or changed their mind (e.g., "I don't need X anymore"), you MUST output false for that requirement.
 Extract their requirements into a strict JSON object that matches the Output Schema.
+Do not reveal chain-of-thought, internal reasoning, scratchpad, or `<think>` content.
 
 # Output Schema constraints
 - `goal_summary`: Highly technically descriptive summary (around 50-150 words) of their finalized requirement and background. Must be in Traditional Chinese.
@@ -238,13 +252,13 @@ Extract their requirements into a strict JSON object that matches the Output Sch
 Output ONLY valid JSON matching the exact keys and types specified.
 """
 
-    payload = {
+    payload = _apply_thinking_control({
         "model": settings.vllm_model_name,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024,
         "temperature": 0.1,
         "response_format": {"type": "json_object"},
-    }
+    })
     headers = {
         "Authorization": f"Bearer {settings.vllm_api_key}",
         "Content-Type": "application/json",
@@ -364,6 +378,7 @@ Generate a complete deployment recommendation based on the user's intent, availa
 - **Tool Preference**: If the user clearly requests a specific tool and it's in the catalog, prioritize it over alternatives.
 - **Capacity Constraints**: If current node capacity is insufficient for the ideal plan, reflect these limits in `summary`, `machines.why`, `overall_config.deployment_strategy`, or `upgrade_when`.
 - **Output Format**: Output exactly the JSON structure defined in `Output Schema`. Do not wrap with natural language conversational responses.
+- **Reasoning Visibility**: Do not reveal chain-of-thought, internal reasoning, scratchpad, or `<think>` content. Return only the final JSON object.
 
 # Input Data
 ## User Context (Extracted summary)
@@ -378,7 +393,7 @@ Generate a complete deployment recommendation based on the user's intent, availa
 # Output Schema
 {json.dumps(plan_schema, ensure_ascii=False)}"""
 
-    payload = {
+    payload = _apply_thinking_control({
         "model": settings.vllm_model_name,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": settings.vllm_max_tokens,
@@ -389,7 +404,7 @@ Generate a complete deployment recommendation based on the user's intent, availa
         "presence_penalty": settings.vllm_presence_penalty,
         "repetition_penalty": settings.vllm_repetition_penalty,
         "response_format": {"type": "json_object"},
-    }
+    })
     headers = {
         "Authorization": f"Bearer {settings.vllm_api_key}",
         "Content-Type": "application/json",

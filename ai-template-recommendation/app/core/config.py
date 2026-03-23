@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     vllm_base_url: str = Field(default="http://localhost:8000/v1")
     vllm_api_key: str = Field(default="vllm-secret-key-change-me")
     vllm_model_name: str = Field(default="")
+    vllm_enable_thinking: bool = Field(default=False)
     vllm_timeout: int = Field(default=30, ge=3, le=300)
     vllm_temperature: float = Field(default=0.6, ge=0.0, le=2.0)
     vllm_chat_temperature: float = Field(default=0.9, ge=0.0, le=2.0)
