@@ -472,6 +472,12 @@ Generate a complete deployment recommendation based on the user's intent, availa
   4. All other common services and supporting services should default to `deployment_type: "lxc"` to conserve resources.
 - **Support Service Rule**: Secondary services such as databases, reverse proxies, caches, and monitoring should remain LXC unless there is a strong architectural reason not to.
 - **Resource Judgment Rule**: You may adjust CPU, memory, disk, and GPU based on the user's described workload. Do not blindly copy template defaults.
+- **Minimum Reasonable Allocation Rule**: Recommend the minimum reasonable CPU, memory, disk, and GPU that can satisfy the user's current need. Resource sizing must be based on present requirements, not optimistic future expansion.
+- **No Buffer Rule**: Do not add extra resource headroom or safety buffer by default. If the user did not clearly describe higher concurrency, larger data volume, heavier workload, or stricter availability needs, keep the allocation lean.
+- **Project Scale Rule**: Infer project scale from the user's role, expected users, sharing scope, and wording. Distinguish between personal coursework, small group projects, and shared course or research services, and size resources accordingly.
+- **Collaboration vs Concurrency Rule**: Multiple students collaborating on one project does not automatically mean high concurrent usage. Only increase CPU or memory for concurrency when the user explicitly describes many simultaneous users, background jobs, large datasets, or other sustained load.
+- **Rental Reasonableness Rule**: Avoid over-allocation that would look unreasonable for a campus cloud borrowing request. Do not recommend large CPU, RAM, disk, or GPU allocations unless the workload evidence clearly justifies them.
+- **Escalation Evidence Rule**: Only recommend higher resources when the request explicitly involves conditions such as multi-user shared access, public-facing service load, database-heavy operations, AI inference, GPU compute, Windows, GUI, long-running jobs, or large storage demand.
 - **Capacity Constraint Rule**: If the current nodes are not ideal, reflect that limitation in `summary`, `machines.why`, `overall_config.deployment_strategy`, or `upgrade_when`.
 - **Upgrade Rule**: `upgrade_when` must mention specific measurable thresholds, such as sustained CPU, RAM, or disk pressure.
 - **Application Target Rule**: `application_target.service_name` must be a user-facing service label, not just a slug.
@@ -480,8 +486,12 @@ Generate a complete deployment recommendation based on the user's intent, availa
   Bad: `service_name = "n8n-template"`
   Bad: `resource_type = "vm"` with `lxc_template_slug = "n8n"`
   Bad: using a template slug that is not in the catalog
+  Bad: giving a 2 to 5 person class project `8 vCPU / 16GB RAM` without clear workload evidence
+  Bad: treating team collaboration as equivalent to heavy concurrent service traffic
   Good: `service_name = "n8n"`, `execution_environment = "lxc"`
   Good: VM result with `os_environment = "windows"` and empty `lxc_template_slug`
+  Good: a personal or small-group project receives the smallest configuration that can clearly run the required service
+  Good: higher resources appear only when the request explicitly shows stronger workload needs
   Good: `form_prefill.reason` written like a short application statement
 - **Output Format Rule**: Output exactly the JSON structure defined in `Output Schema`. Do not wrap with any conversational text.
 - **Reasoning Visibility**: Do not reveal chain-of-thought, internal reasoning, scratchpad, or `<think>` content. Return only the final JSON object.
