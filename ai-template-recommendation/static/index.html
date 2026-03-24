@@ -546,7 +546,9 @@
       }
 
       function stripThinkTags(text) {
-        return String(text || "").replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+        const original = String(text || "").trim();
+        const stripped = original.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+        return stripped === "" ? original : stripped;
       }
 
       function normalizeHostname(value) {
