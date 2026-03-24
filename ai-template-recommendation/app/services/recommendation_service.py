@@ -869,9 +869,32 @@ def _build_form_prefill(
         f"{template_slug}-node"[:63] if template_slug else "ai-generated-host"
     )
 
-    cores = int(raw.get("cores") or primary_machine.get("cpu") or 2)
-    memory_mb = int(raw.get("memory_mb") or primary_machine.get("memory_mb") or 2048)
-    disk_gb = int(raw.get("disk_gb") or primary_machine.get("disk_gb") or 10)
+    def _safe_int_like(value: Any, default: int, minimum: int | None = None) -> int:
+        """
+        Parse ints from possibly noisy AI / user values like "2 vCPU" or "4GB".
+        Falls back to `default` and enforces an optional `minimum`.
+        """
+        parsed: int
+        try:
+            if value is None or value == "":
+                raise ValueError
+            if isinstance(value, str):
+                digits = "".join(ch for ch in value if ch.isdigit())
+                if digits:
+                    parsed = int(digits)
+                else:
+                    parsed = int(value)
+            else:
+                parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+        if minimum is not None and parsed < minimum:
+            parsed = minimum
+        return parsed
+
+    cores = _safe_int_like(raw.get("cores") or primary_machine.get("cpu"), default=2, minimum=2)
+    memory_mb = _safe_int_like(raw.get("memory_mb") or primary_machine.get("memory_mb"), default=2048, minimum=2048)
+    disk_gb = _safe_int_like(raw.get("disk_gb") or primary_machine.get("disk_gb"), default=10, minimum=10)
     username = str(raw.get("username") or "").strip()
     if resource_type == "vm" and not username:
         username = "student"
