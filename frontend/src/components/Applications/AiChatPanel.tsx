@@ -17,6 +17,7 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react"
@@ -197,6 +198,20 @@ export function AiChatPanel({ onImportPlan, onImportReason }: AiChatPanelProps) 
   const [metrics, setMetrics] = useState<AiMetrics | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const quickPrompts = useMemo(
+    () => [
+      t("aiChat.quickPrompt1", {
+        defaultValue: "我要 Windows GUI + 公網 + webhook",
+      }),
+      t("aiChat.quickPrompt2", {
+        defaultValue: "先給我最省資源、可快速上課的配置",
+      }),
+      t("aiChat.quickPrompt3", {
+        defaultValue: "預估 40 人同時使用，請重視穩定性",
+      }),
+    ],
+    [t],
+  )
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -209,6 +224,12 @@ export function AiChatPanel({ onImportPlan, onImportReason }: AiChatPanelProps) 
   useEffect(() => {
     scrollToBottom()
   }, [messages, isLoading, scrollToBottom])
+
+  useEffect(() => {
+    if (!inputRef.current) return
+    inputRef.current.style.height = "0px"
+    inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 220)}px`
+  }, [input])
 
   const buildRequestMessages = useCallback(
     (history: ChatMessage[]) =>
@@ -347,6 +368,12 @@ export function AiChatPanel({ onImportPlan, onImportReason }: AiChatPanelProps) 
     setPlanContextMessage(null)
     setLatestPlan(null)
     setMetrics(null)
+    inputRef.current?.focus()
+  }
+
+  const appendPrompt = (text: string) => {
+    setInput((prev) => (prev.trim() ? `${prev.trim()}\n${text}` : text))
+    inputRef.current?.focus()
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -371,6 +398,7 @@ export function AiChatPanel({ onImportPlan, onImportReason }: AiChatPanelProps) 
 
   const summaryReason =
     formPrefill?.reason || latestPlan?.summary || t("aiChat.planError")
+  const inputLength = input.length
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -630,14 +658,25 @@ export function AiChatPanel({ onImportPlan, onImportReason }: AiChatPanelProps) 
                   </div>
 
                   <div className="border-t pt-4">
-                    <Button
-                      size="sm"
-                      className="w-full h-9"
-                      onClick={handleImportPlan}
-                    >
-                      <Download className="mr-1.5 h-3 w-3" />
-                      {t("aiChat.importPlan")}
-                    </Button>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Button
+                        size="sm"
+                        className="h-9"
+                        onClick={handleImportPlan}
+                      >
+                        <Download className="mr-1.5 h-3 w-3" />
+                        {t("aiChat.importPlan")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-9"
+                        onClick={handleImportReason}
+                      >
+                        <FileText className="mr-1.5 h-3 w-3" />
+                        {t("aiChat.importReason")}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -654,9 +693,28 @@ export function AiChatPanel({ onImportPlan, onImportReason }: AiChatPanelProps) 
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={t("aiChat.placeholder")}
-          className="min-h-[96px] max-h-[180px] resize-y text-sm"
+          className="min-h-[96px] max-h-[220px] resize-none text-sm"
           disabled={isLoading}
         />
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>{t("aiChat.inputHint", { defaultValue: "Enter 送出，Shift + Enter 換行" })}</span>
+          <span>{inputLength} 字</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {quickPrompts.map((prompt) => (
+            <Button
+              key={prompt}
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-[11px]"
+              onClick={() => appendPrompt(prompt)}
+              disabled={isLoading}
+            >
+              {prompt}
+            </Button>
+          ))}
+        </div>
         <div className="flex gap-2">
           <Button
             size="sm"

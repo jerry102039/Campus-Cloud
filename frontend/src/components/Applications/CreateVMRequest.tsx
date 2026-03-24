@@ -2,7 +2,7 @@ import { standardSchemaResolver } from "@hookform/resolvers/standard-schema"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Bot, Plus, X } from "lucide-react"
 import { useCallback, useMemo, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { useTranslation } from "react-i18next"
 import { z } from "zod"
 import { LxcService, VmRequestsService, VmService } from "@/client"
@@ -42,6 +42,15 @@ import { handleError } from "@/utils"
 import { AiChatPanel } from "./AiChatPanel"
 import type { AiPlanResult } from "./AiChatPanel"
 import { FastTemplatesTab, type FastTemplate } from "./FastTemplatesTab"
+
+function normalizeHostname(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 63)
+}
 
 const CreateVMRequest = () => {
   const { t } = useTranslation([
@@ -96,7 +105,7 @@ const CreateVMRequest = () => {
     [t],
   )
 
-  type FormData = z.infer<typeof formSchema>
+  type FormData = z.input<typeof formSchema>
 
   const form = useForm<FormData>({
     resolver: standardSchemaResolver(formSchema),
@@ -118,6 +127,37 @@ const CreateVMRequest = () => {
       expiry_date: "",
     },
   })
+
+  const watchedResourceType = useWatch({
+    control: form.control,
+    name: "resource_type",
+  })
+  const watchedHostname = useWatch({ control: form.control, name: "hostname" })
+  const watchedPassword = useWatch({ control: form.control, name: "password" })
+  const watchedReason = useWatch({ control: form.control, name: "reason" })
+  const watchedOsTemplate = useWatch({ control: form.control, name: "ostemplate" })
+  const watchedTemplateId = useWatch({ control: form.control, name: "template_id" })
+  const watchedUsername = useWatch({ control: form.control, name: "username" })
+
+  const isSubmitReady = useMemo(() => {
+    const basicReady = Boolean(
+      watchedReason?.trim() && watchedHostname?.trim() && watchedPassword,
+    )
+    if (!basicReady) return false
+
+    if (watchedResourceType === "vm") {
+      return Boolean(watchedTemplateId && watchedUsername?.trim())
+    }
+    return Boolean(watchedOsTemplate)
+  }, [
+    watchedReason,
+    watchedHostname,
+    watchedPassword,
+    watchedResourceType,
+    watchedTemplateId,
+    watchedUsername,
+    watchedOsTemplate,
+  ])
 
   const { data: lxcTemplates, isLoading: lxcTemplatesLoading } = useQuery({
     queryKey: ["lxc-templates"],
@@ -194,7 +234,7 @@ const CreateVMRequest = () => {
       const type = (prefill.resource_type === "vm" ? "vm" : "lxc") as "lxc" | "vm"
       setResourceType(type)
       form.setValue("resource_type", type)
-      if (prefill.hostname) form.setValue("hostname", prefill.hostname)
+      if (prefill.hostname) form.setValue("hostname", normalizeHostname(prefill.hostname))
       if (prefill.cores) form.setValue("cores", prefill.cores)
       if (prefill.memory_mb) form.setValue("memory", prefill.memory_mb)
       if (prefill.reason) form.setValue("reason", prefill.reason)
@@ -364,6 +404,11 @@ const CreateVMRequest = () => {
                                 <Input
                                   placeholder="例如：project-alpha-web"
                                   {...field}
+                                  onBlur={(event) => {
+                                    const normalized = normalizeHostname(event.target.value)
+                                    field.onChange(normalized)
+                                    field.onBlur()
+                                  }}
                                   required
                                 />
                               </FormControl>
@@ -463,6 +508,11 @@ const CreateVMRequest = () => {
                               )}
                             </div>
                           </div>
+                          {serviceTemplateSlug && (
+                            <div className="text-xs text-muted-foreground break-all">
+                              slug: {serviceTemplateSlug}
+                            </div>
+                          )}
                         </FormItem>
 
                         <FormField
@@ -661,6 +711,11 @@ const CreateVMRequest = () => {
                                 <Input
                                   placeholder="例如：web-server-01"
                                   {...field}
+                                  onBlur={(event) => {
+                                    const normalized = normalizeHostname(event.target.value)
+                                    field.onChange(normalized)
+                                    field.onBlur()
+                                  }}
                                   required
                                 />
                               </FormControl>
@@ -938,6 +993,9 @@ const CreateVMRequest = () => {
                         required
                       />
                     </FormControl>
+                    <div className="flex items-center justify-end text-xs text-muted-foreground">
+                      {(field.value || "").length} 字
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -974,7 +1032,7 @@ const CreateVMRequest = () => {
                   {t("common:buttons.cancel")}
                 </Button>
               </DialogClose>
-              <LoadingButton type="submit" loading={mutation.isPending}>
+              <LoadingButton type="submit" loading={mutation.isPending} disabled={!isSubmitReady}>
                 {t("applications:create.submitButton")}
               </LoadingButton>
             </DialogFooter>

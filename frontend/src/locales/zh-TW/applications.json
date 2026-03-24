@@ -26,6 +26,10 @@
   "aiChat": {
     "title": "AI 助手",
     "placeholder": "描述您的需求，例如：我想架設一個 n8n 自動化服務...",
+    "inputHint": "Enter 送出，Shift + Enter 換行",
+    "quickPrompt1": "我要 Windows GUI + 公網 + webhook",
+    "quickPrompt2": "先給我最省資源、可快速上課的配置",
+    "quickPrompt3": "預估 40 人同時使用，請重視穩定性",
     "send": "送出",
     "clear": "清空對話",
     "generatePlan": "產生推薦配置",
