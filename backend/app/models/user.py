@@ -12,6 +12,8 @@ from sqlmodel import Column, Enum, Field, Relationship, SQLModel
 from .base import get_datetime_utc
 
 if TYPE_CHECKING:
+    from .ai_api_credential import AIAPICredential
+    from .ai_api_request import AIAPIRequest
     from .audit_log import AuditLog
     from .resource import Resource
     from .spec_change_request import SpecChangeRequest
@@ -60,6 +62,13 @@ class User(UserBase, table=True):
     spec_change_requests: list["SpecChangeRequest"] = Relationship(
         back_populates="user",
         sa_relationship_kwargs={"foreign_keys": "[SpecChangeRequest.user_id]"},
+    )
+    ai_api_requests: list["AIAPIRequest"] = Relationship(
+        back_populates="user",
+        sa_relationship_kwargs={"foreign_keys": "[AIAPIRequest.user_id]"},
+    )
+    ai_api_credentials: list["AIAPICredential"] = Relationship(
+        back_populates="user"
     )
     audit_logs: list["AuditLog"] = Relationship(back_populates="user")
 
