@@ -7,6 +7,7 @@ from statistics import mean
 from app.schemas import (
     DailySimulationSummary,
     DefaultScenarioResponse,
+    HistoricalProfile,
     HOURS_IN_DAY,
     HourlySimulation,
     PlacementRecord,
@@ -16,15 +17,27 @@ from app.schemas import (
     ServerInput,
     ServerSnapshot,
     SimulationRequest,
+    SimulationCalculationRow,
     SimulationResponse,
     SimulationState,
     SimulationSummary,
     VMTemplate,
     VmStackItem,
 )
+from app.services import proxmox_analytics_service
 
 
 EPSILON = 1e-9
+CPU_MARGIN = 1.4
+RAM_MARGIN = 1.15
+CPU_FLOOR_RATIO = 0.35
+RAM_FLOOR_RATIO = 0.5
+CPU_PEAK_MARGIN = 1.1
+RAM_PEAK_MARGIN = 1.05
+CPU_PEAK_WARN_SHARE = 0.85
+CPU_PEAK_HIGH_SHARE = 0.9
+RAM_PEAK_WARN_SHARE = 0.8
+RAM_PEAK_HIGH_SHARE = 0.85
 
 
 @dataclass
@@ -88,6 +101,52 @@ def build_default_scenario() -> DefaultScenarioResponse:
             "Add VM reservations, mark their hourly windows, and review placement "
             "hour by hour across the day."
         ),
+        source="default",
+        historical_profiles=[],
+        historical_peak_hours=[],
+        historical_hourly_peaks={},
+    )
+
+
+async def build_live_scenario() -> DefaultScenarioResponse:
+    analytics = await proxmox_analytics_service.fetch_monthly_analytics()
+    servers = [
+        ServerInput(
+            name=node.name,
+            cpu_cores=node.total_cpu_cores,
+            memory_gb=node.total_memory_gb,
+            disk_gb=node.total_disk_gb,
+            gpu_count=0,
+            cpu_used=(node.total_cpu_cores or 0.0) * (node.current_cpu_ratio or 0.0),
+            memory_used_gb=(node.total_memory_gb or 0.0) * (node.current_memory_ratio or 0.0),
+            disk_used_gb=(node.total_disk_gb or 0.0) * (node.current_disk_ratio or 0.0),
+            gpu_used=0,
+        )
+        for node in analytics.nodes
+        if node.status == "online"
+        and node.total_cpu_cores is not None
+        and node.total_memory_gb is not None
+        and node.total_disk_gb is not None
+    ]
+    if not servers:
+        raise proxmox_analytics_service.ProxmoxAnalyticsError(
+            "No online Proxmox nodes could be converted into a live simulator scenario."
+        )
+
+    return DefaultScenarioResponse(
+        servers=servers,
+        vm_templates=[],
+        note=(
+            f"Live PVE scenario from {analytics.host}. "
+            "Current node usage is loaded from Proxmox, and new reservations use "
+            "historical same-type CPU/RAM averages when available."
+        ),
+        source="live",
+        historical_profiles=proxmox_analytics_service.build_historical_profiles(
+            analytics.guest_types
+        ),
+        historical_peak_hours=_cluster_peak_hours(analytics.cluster.hourly),
+        historical_hourly_peaks=_cluster_hourly_peak_values(analytics.cluster.hourly),
     )
 
 
@@ -124,6 +183,35 @@ def _run_hour_simulation(
             selected_vm_template_id=request.selected_vm_template_id,
             enabled_templates=hour_templates,
         )
+    effective_template_results = [
+        _effective_template_for_hour(
+            template=template,
+            hour=hour,
+            historical_profiles=request.historical_profiles,
+        )
+        for template in requested_templates
+    ]
+    effective_requested_templates = [item["template"] for item in effective_template_results]
+    calculations = [
+        SimulationCalculationRow(
+            vm_template_id=item["requested"].id,
+            vm_name=item["requested"].name,
+            requested_cpu_cores=round(item["requested"].cpu_cores, 2),
+            requested_memory_gb=round(item["requested"].memory_gb, 2),
+            requested_disk_gb=round(item["requested"].disk_gb, 2),
+            effective_cpu_cores=round(item["template"].cpu_cores, 2),
+            effective_memory_gb=round(item["template"].memory_gb, 2),
+            peak_cpu_cores=round(item["peak_template"].cpu_cores, 2),
+            peak_memory_gb=round(item["peak_template"].memory_gb, 2),
+            source=item["source"],
+            profile_label=item["profile_label"],
+            cpu_ratio=item["cpu_ratio"],
+            memory_ratio=item["memory_ratio"],
+            placement_status="pending",
+            peak_risk="pending",
+        )
+        for item in effective_template_results
+    ]
     servers = [_to_working_server(item) for item in request.servers]
     placements: list[PlacementRecord] = []
     failed_templates: list[VMTemplate] = []
@@ -151,6 +239,7 @@ def _run_hour_simulation(
             label=_hour_label(hour),
             active_vm_names=[],
             reserved_vm_names=[template.name for template in enabled_templates],
+            calculations=[],
             placements=[],
             states=states,
             summary=summary,
@@ -158,8 +247,8 @@ def _run_hour_simulation(
 
     previous_assignments: dict[str, str] = {}
     final_servers = _snapshot_servers(servers)
-    for index, template in enumerate(requested_templates, start=1):
-        current_templates = requested_templates[:index]
+    for index, template in enumerate(effective_requested_templates, start=1):
+        current_templates = effective_requested_templates[:index]
         allocation = _rebalance_allocation(
             base_servers=request.servers,
             templates=current_templates,
@@ -170,6 +259,12 @@ def _run_hour_simulation(
         server_name = allocation.assignment_map.get(template.id)
 
         if server_name is not None:
+            _update_calculation_row(
+                calculations=calculations,
+                vm_template_id=template.id,
+                placed_server_name=server_name,
+                placement_status="placed",
+            )
             placement = PlacementRecord(
                 step=index,
                 vm_template_id=template.id,
@@ -202,6 +297,12 @@ def _run_hour_simulation(
                 )
             )
         else:
+            _update_calculation_row(
+                calculations=calculations,
+                vm_template_id=template.id,
+                placed_server_name=None,
+                placement_status="no_fit",
+            )
             states.append(
                 SimulationState(
                     step=index,
@@ -216,25 +317,31 @@ def _run_hour_simulation(
         stop_reason = "No server can fit the active reservations in this hour."
     elif failed_templates:
         stop_reason = (
-            f"Placed {len(requested_templates) - len(failed_templates)} / {len(requested_templates)} active VMs. "
+            f"Placed {len(effective_requested_templates) - len(failed_templates)} / {len(effective_requested_templates)} active VMs. "
             f"Unplaced: {', '.join(template.name for template in failed_templates)}."
         )
     else:
-        stop_reason = f"Placed all {len(requested_templates)} active VMs."
+        stop_reason = f"Placed all {len(effective_requested_templates)} active VMs."
 
     summary = _build_summary(
         final_servers=final_servers,
-        placements=[item for item in placements if item.step <= len(requested_templates)],
+        placements=[item for item in placements if item.step <= len(effective_requested_templates)],
         stop_reason=stop_reason,
-        enabled_templates=requested_templates,
-        requested_templates=requested_templates,
+        enabled_templates=effective_requested_templates,
+        requested_templates=effective_requested_templates,
         failed_templates=failed_templates,
+    )
+    _reconcile_calculations(
+        calculations=calculations,
+        final_assignment_map=previous_assignments,
+        final_servers=final_servers,
     )
     return HourlySimulation(
         hour=hour,
         label=_hour_label(hour),
-        active_vm_names=[template.name for template in requested_templates],
+        active_vm_names=[template.name for template in effective_requested_templates],
         reserved_vm_names=[template.name for template in enabled_templates],
+        calculations=calculations,
         placements=placements,
         states=states,
         summary=summary,
@@ -271,6 +378,36 @@ def _build_daily_summary(
     )
 
 
+def _cluster_peak_hours(hourly_points: list) -> list[int]:
+    peak_score = 0.0
+    peak_hours: list[int] = []
+    for point in hourly_points:
+        score = max(
+            point.cpu_ratio or 0.0,
+            point.memory_ratio or 0.0,
+            point.disk_ratio or 0.0,
+        )
+        if score <= 0:
+            continue
+        if score > peak_score:
+            peak_score = score
+            peak_hours = [point.hour]
+        elif abs(score - peak_score) < EPSILON:
+            peak_hours.append(point.hour)
+    return peak_hours
+
+
+def _cluster_hourly_peak_values(hourly_points: list) -> dict[str, float | None]:
+    return {
+        str(point.hour): max(
+            point.cpu_ratio or 0.0,
+            point.memory_ratio or 0.0,
+            point.disk_ratio or 0.0,
+        )
+        for point in hourly_points
+    }
+
+
 def _to_working_server(server: ServerInput) -> _WorkingServer:
     return _WorkingServer(
         name=server.name,
@@ -297,6 +434,189 @@ def _resolve_requested_templates(
         if template.id == selected_vm_template_id:
             return [template]
     raise ValueError(f"Selected VM template '{selected_vm_template_id}' is not enabled.")
+
+
+def _effective_template_for_hour(
+    *,
+    template: VMTemplate,
+    hour: int,
+    historical_profiles: list[HistoricalProfile],
+) -> dict[str, object]:
+    profile = _match_historical_profile(template, historical_profiles)
+    if profile is None:
+        return {
+            "requested": template,
+            "template": template.model_copy(deep=True),
+            "peak_template": template.model_copy(deep=True),
+            "source": "requested",
+            "profile_label": None,
+            "cpu_ratio": None,
+            "memory_ratio": None,
+        }
+
+    hour_point = next((item for item in profile.hourly if item.hour == hour), None)
+    cpu_ratio = hour_point.cpu_ratio if hour_point and hour_point.cpu_ratio is not None else profile.average_cpu_ratio
+    memory_ratio = (
+        hour_point.memory_ratio
+        if hour_point and hour_point.memory_ratio is not None
+        else profile.average_memory_ratio
+    )
+    peak_cpu_ratio = profile.peak_cpu_ratio if profile.peak_cpu_ratio is not None else cpu_ratio
+    peak_memory_ratio = (
+        profile.peak_memory_ratio if profile.peak_memory_ratio is not None else memory_ratio
+    )
+
+    effective_cpu = _effective_requested_value(
+        requested=template.cpu_cores,
+        ratio=cpu_ratio,
+        margin=CPU_MARGIN,
+        floor_ratio=CPU_FLOOR_RATIO,
+    )
+    effective_memory = _effective_requested_value(
+        requested=template.memory_gb,
+        ratio=memory_ratio,
+        margin=RAM_MARGIN,
+        floor_ratio=RAM_FLOOR_RATIO,
+    )
+    peak_cpu = min(
+        template.cpu_cores,
+        max(
+            _scaled_requested_value(
+                requested=template.cpu_cores,
+                ratio=peak_cpu_ratio,
+                margin=CPU_PEAK_MARGIN,
+            ),
+            effective_cpu,
+        ),
+    )
+    peak_memory = min(
+        template.memory_gb,
+        max(
+            _scaled_requested_value(
+                requested=template.memory_gb,
+                ratio=peak_memory_ratio,
+                margin=RAM_PEAK_MARGIN,
+            ),
+            effective_memory,
+        ),
+    )
+    return {
+        "requested": template,
+        "template": template.model_copy(
+            update={
+                "cpu_cores": round(effective_cpu, 2),
+                "memory_gb": round(effective_memory, 2),
+            },
+            deep=True,
+        ),
+        "peak_template": template.model_copy(
+            update={
+                "cpu_cores": round(peak_cpu, 2),
+                "memory_gb": round(peak_memory, 2),
+            },
+            deep=True,
+        ),
+        "source": "historical",
+        "profile_label": profile.type_label,
+        "cpu_ratio": cpu_ratio,
+        "memory_ratio": memory_ratio,
+    }
+
+
+def _effective_requested_value(
+    *,
+    requested: float,
+    ratio: float | None,
+    margin: float,
+    floor_ratio: float,
+) -> float:
+    if ratio is None:
+        return requested
+    historical_value = requested * ratio * margin
+    floor_value = requested * floor_ratio
+    return min(requested, max(historical_value, floor_value))
+
+
+def _scaled_requested_value(
+    *,
+    requested: float,
+    ratio: float | None,
+    margin: float,
+) -> float:
+    if ratio is None:
+        return requested
+    return requested * ratio * margin
+
+
+def _match_historical_profile(
+    template: VMTemplate,
+    historical_profiles: list[HistoricalProfile],
+) -> HistoricalProfile | None:
+    template_cpu = round(template.cpu_cores, 2)
+    template_memory = round(template.memory_gb, 2)
+    for profile in historical_profiles:
+        if profile.configured_cpu_cores is None or profile.configured_memory_gb is None:
+            continue
+        if round(profile.configured_cpu_cores, 2) == template_cpu and round(profile.configured_memory_gb, 2) == template_memory:
+            return profile
+    return None
+
+
+def _update_calculation_row(
+    *,
+    calculations: list[SimulationCalculationRow],
+    vm_template_id: str,
+    placed_server_name: str | None,
+    placement_status: str,
+) -> None:
+    for row in calculations:
+        if row.vm_template_id == vm_template_id:
+            row.placed_server_name = placed_server_name
+            row.placement_status = placement_status
+            return
+
+
+def _reconcile_calculations(
+    *,
+    calculations: list[SimulationCalculationRow],
+    final_assignment_map: dict[str, str],
+    final_servers: list[ServerSnapshot],
+) -> None:
+    for row in calculations:
+        server_name = final_assignment_map.get(row.vm_template_id)
+        if server_name is None:
+            row.placed_server_name = None
+            row.placement_status = "no_fit"
+            row.peak_risk = "n/a"
+            continue
+
+        row.placed_server_name = server_name
+        row.placement_status = "placed"
+        row.peak_risk = _peak_risk_for_row(
+            row=row,
+            server=_snapshot_server_by_name(final_servers, server_name),
+        )
+
+
+def _peak_risk_for_row(
+    *,
+    row: SimulationCalculationRow,
+    server: ServerSnapshot,
+) -> str:
+    peak_cpu_share = _share(
+        server.used.cpu_cores - row.effective_cpu_cores + row.peak_cpu_cores,
+        server.total.cpu_cores,
+    )
+    peak_memory_share = _share(
+        server.used.memory_gb - row.effective_memory_gb + row.peak_memory_gb,
+        server.total.memory_gb,
+    )
+
+    if peak_cpu_share >= CPU_PEAK_HIGH_SHARE or peak_memory_share >= RAM_PEAK_HIGH_SHARE:
+        return "high"
+    if peak_cpu_share >= CPU_PEAK_WARN_SHARE or peak_memory_share >= RAM_PEAK_WARN_SHARE:
+        return "guarded"
+    return "safe"
 
 
 @dataclass
