@@ -14,8 +14,8 @@ from app.models import AIAPICredential, User, get_datetime_utc
 
 
 def get_current_user_by_ai_api_key(
+    session: SessionDep,
     authorization: str = Header(..., description="Bearer ccai_xxx"),
-    session: SessionDep = Depends(),
 ) -> tuple[User, AIAPICredential]:
     """
     通过 AI API Key (ccai_xxx) 验证用户身份
@@ -98,7 +98,9 @@ def get_current_user_by_ai_api_key(
 
 
 # 类型标注（用于依赖注入）
-AIAPIUserDep = Annotated[tuple[User, AIAPICredential], Depends(get_current_user_by_ai_api_key)]
+AIAPIUserDep = Annotated[
+    tuple[User, AIAPICredential], Depends(get_current_user_by_ai_api_key)
+]
 
 
 __all__ = ["get_current_user_by_ai_api_key", "AIAPIUserDep"]
