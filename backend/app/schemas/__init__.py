@@ -96,6 +96,11 @@ from .proxmox_config import (
     ProxmoxConfigUpdate,
     ProxmoxConnectionTestResult,
 )
+from .script_deploy import (
+    ScriptDeployRequest,
+    ScriptDeployResponse,
+    ScriptDeployStatus,
+)
 
 __all__ = [
     # Common
@@ -181,4 +186,8 @@ __all__ = [
     "ProxmoxConfigPublic",
     "ProxmoxConfigUpdate",
     "ProxmoxConnectionTestResult",
+    # Script Deploy
+    "ScriptDeployRequest",
+    "ScriptDeployResponse",
+    "ScriptDeployStatus",
 ]
