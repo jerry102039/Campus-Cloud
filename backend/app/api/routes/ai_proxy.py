@@ -3,6 +3,7 @@ AI Proxy API Routes - 代理到 VLLM 的 API 端点
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
 
 import httpx
@@ -46,47 +47,21 @@ async def chat_completions(
     """
     user, credential = user_and_credential
 
-    # 1. 速率限制检查
-    allowed, rate_info = ai_api_service.check_rate_limit(
-        session=session, user_id=user.id
-    )
-
-    if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": {
-                    "message": f"Rate limit exceeded. Please try again in {rate_info['reset_at'].strftime('%Y-%m-%d %H:%M:%S')}",
-                    "type": "rate_limit_error",
-                    "limit": rate_info["limit"],
-                    "remaining": rate_info["remaining"],
-                    "reset_at": rate_info["reset_at"].isoformat(),
-                }
-            },
-        )
-
-    # 2. 转换为 dict（用于代理）
+    # 转换为 dict（用于代理）
     request_data = request.model_dump(exclude_none=True)
 
     try:
-        # 3. 判断是否流式
         if request.stream:
-            # 流式响应
             return StreamingResponse(
                 ai_api_service.proxy_to_vllm_chat_completion_stream(
-                    session=session,
                     user=user,
-                    credential=credential,
                     request_data=request_data,
                 ),
                 media_type="text/event-stream",
             )
         else:
-            # 非流式响应
             result = await ai_api_service.proxy_to_vllm_chat_completion(
-                session=session,
                 user=user,
-                credential=credential,
                 request_data=request_data,
             )
             return result
@@ -150,6 +125,12 @@ async def list_models(
             response = await client.get(url, headers=headers)
             response.raise_for_status()
             result = response.json()
+
+        # vLLM may not return `created` field; backfill with current timestamp
+        now_ts = int(time.time())
+        for model in result.get("data", []):
+            if "created" not in model or model["created"] is None:
+                model["created"] = now_ts
 
         logger.info("User %s queried model list", user.email)
         return result

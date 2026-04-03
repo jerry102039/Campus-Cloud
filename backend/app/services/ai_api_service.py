@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import secrets
@@ -179,9 +178,6 @@ def review_request(
         if not base_url:
             raise BadRequestError("AI API connection settings are incomplete")
 
-        # 计算 API key 的 hash 用于快速查询
-        api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-
         session.add(
             AIAPICredential(
                 user_id=db_request.user_id,
@@ -189,7 +185,6 @@ def review_request(
                 base_url=base_url,
                 api_key_encrypted=encrypt_value(api_key),
                 api_key_prefix=_credential_prefix(api_key),
-                api_key_hash=api_key_hash,
             )
         )
 
@@ -244,7 +239,6 @@ def rotate_credential(
     session.add(credential)
 
     new_api_key = _generate_user_api_key()
-    new_api_key_hash = hashlib.sha256(new_api_key.encode()).hexdigest()
 
     new_credential = AIAPICredential(
         user_id=credential.user_id,
@@ -252,7 +246,6 @@ def rotate_credential(
         base_url=credential.base_url,
         api_key_encrypted=encrypt_value(new_api_key),
         api_key_prefix=_credential_prefix(new_api_key),
-        api_key_hash=new_api_key_hash,
     )
     session.add(new_credential)
 
@@ -414,41 +407,25 @@ def record_usage(
 
 async def proxy_to_vllm_chat_completion(
     *,
-    session: Session,
     user: User,
-    credential: AIAPICredential,
     request_data: dict,
 ) -> dict:
     """
-    代理聊天补全请求到 VLLM Gateway（非流式）
-
-    Args:
-        session: 数据库会话
-        user: 用户对象
-        credential: API 凭证对象
-        request_data: 请求数据（dict 格式）
+    代理聊天补全請求到 VLLM Gateway（非流式）
 
     Returns:
-        dict: VLLM 响应
-
-    Raises:
-        HTTPException: 代理失败时抛出异常
+        dict: VLLM 回應（附加 duration_ms 耗時資訊）
     """
-    # 构建请求 URL
     url = f"{ai_api_settings.resolved_vllm_base_url}/v1/chat/completions"
-
-    # 构建请求头（使用 VLLM 的 API Key）
     headers = {
         "Authorization": f"Bearer {ai_api_settings.ai_api_api_key}",
         "Content-Type": "application/json",
     }
 
-    # 记录开始时间
     start_time = time.time()
     model_name = request_data.get("model", "unknown")
 
     try:
-        # 发送请求到 VLLM
         async with httpx.AsyncClient(
             timeout=ai_api_settings.ai_api_timeout
         ) as client:
@@ -456,115 +433,47 @@ async def proxy_to_vllm_chat_completion(
             response.raise_for_status()
             result = response.json()
 
-        # 提取 tokens
-        usage = result.get("usage", {})
-        prompt_tokens = usage.get("prompt_tokens", 0)
-        completion_tokens = usage.get("completion_tokens", 0)
-        total_tokens = usage.get("total_tokens", 0)
-
-        # 记录使用量
         duration_ms = int((time.time() - start_time) * 1000)
-        record_usage(
-            session=session,
-            user_id=user.id,
-            credential_id=credential.id,
-            model_name=model_name,
-            request_type="chat_completion",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            request_duration_ms=duration_ms,
-            status="success",
-        )
+        result["duration_ms"] = duration_ms  # 附加耗時到回應
 
+        usage = result.get("usage", {})
         logger.info(
             "User %s completed chat request: model=%s, tokens=%d, duration=%dms",
             user.email,
             model_name,
-            total_tokens,
+            usage.get("total_tokens", 0),
             duration_ms,
         )
 
         return result
 
     except httpx.HTTPStatusError as e:
-        # HTTP 错误（4xx, 5xx）
-        duration_ms = int((time.time() - start_time) * 1000)
-        error_msg = f"VLLM returned {e.response.status_code}: {e.response.text}"
-
-        record_usage(
-            session=session,
-            user_id=user.id,
-            credential_id=credential.id,
-            model_name=model_name,
-            request_type="chat_completion",
-            request_duration_ms=duration_ms,
-            status="error",
-            error_message=error_msg,
+        logger.error(
+            "VLLM request failed for user %s: %s",
+            user.email,
+            f"VLLM returned {e.response.status_code}: {e.response.text}",
         )
-
-        logger.error("VLLM request failed for user %s: %s", user.email, error_msg)
         raise
 
     except httpx.RequestError as e:
-        # 网络错误（连接失败、超时等）
-        duration_ms = int((time.time() - start_time) * 1000)
-        error_msg = f"Request error: {str(e)}"
-
-        record_usage(
-            session=session,
-            user_id=user.id,
-            credential_id=credential.id,
-            model_name=model_name,
-            request_type="chat_completion",
-            request_duration_ms=duration_ms,
-            status="error",
-            error_message=error_msg,
-        )
-
-        logger.error("VLLM connection failed for user %s: %s", user.email, error_msg)
+        logger.error("VLLM connection failed for user %s: %s", user.email, str(e))
         raise
 
     except Exception as e:
-        # 其他未知错误
-        duration_ms = int((time.time() - start_time) * 1000)
-        error_msg = f"Unexpected error: {str(e)}"
-
-        record_usage(
-            session=session,
-            user_id=user.id,
-            credential_id=credential.id,
-            model_name=model_name,
-            request_type="chat_completion",
-            request_duration_ms=duration_ms,
-            status="error",
-            error_message=error_msg,
-        )
-
-        logger.error("Unexpected error for user %s: %s", user.email, error_msg)
+        logger.error("Unexpected error for user %s: %s", user.email, str(e))
         raise
 
 
 async def proxy_to_vllm_chat_completion_stream(
     *,
-    session: Session,
     user: User,
-    credential: AIAPICredential,
     request_data: dict,
 ) -> AsyncGenerator[str, None]:
     """
-    代理聊天补全请求到 VLLM Gateway（流式）
+    代理聊天补全請求到 VLLM Gateway（流式）
 
-    Args:
-        session: 数据库会话
-        user: 用户对象
-        credential: API 凭证对象
-        request_data: 请求数据
-
-    Yields:
-        str: SSE 格式的数据块
+    流式回應的 usage 資訊已包含在 vLLM 传輸的各個 chunk 中（若模型支援）。
     """
-    # 确保开启流式
     request_data["stream"] = True
 
     url = f"{ai_api_settings.resolved_vllm_base_url}/v1/chat/completions"
@@ -575,7 +484,6 @@ async def proxy_to_vllm_chat_completion_stream(
 
     start_time = time.time()
     model_name = request_data.get("model", "unknown")
-    total_tokens_tracked = 0
 
     try:
         async with httpx.AsyncClient(
@@ -590,64 +498,27 @@ async def proxy_to_vllm_chat_completion_stream(
                     if not line.strip():
                         continue
 
-                    # SSE 格式: "data: {...}"
                     if line.startswith("data: "):
-                        data_str = line[6:]  # 去掉 "data: " 前缀
+                        data_str = line[6:]
 
                         if data_str == "[DONE]":
-                            # 流结束，记录使用量
                             duration_ms = int((time.time() - start_time) * 1000)
-                            record_usage(
-                                session=session,
-                                user_id=user.id,
-                                credential_id=credential.id,
-                                model_name=model_name,
-                                request_type="chat_completion_stream",
-                                prompt_tokens=0,  # 流式响应通常无法准确统计
-                                completion_tokens=total_tokens_tracked,
-                                total_tokens=total_tokens_tracked,
-                                request_duration_ms=duration_ms,
-                                status="success",
-                            )
-
                             logger.info(
                                 "User %s completed stream: model=%s, duration=%dms",
                                 user.email,
                                 model_name,
                                 duration_ms,
                             )
-
-                            yield f"data: [DONE]\n\n"
+                            yield "data: [DONE]\n\n"
                             break
 
                         try:
-                            # 尝试从 usage 字段提取 tokens（某些模型会在流式中提供）
-                            import json
-
                             chunk = json.loads(data_str)
-                            if "usage" in chunk:
-                                total_tokens_tracked = chunk["usage"].get(
-                                    "total_tokens", 0
-                                )
-
-                            yield f"data: {data_str}\n\n"
+                            yield f"data: {json.dumps(chunk)}\n\n"
                         except json.JSONDecodeError:
                             yield f"data: {data_str}\n\n"
 
     except Exception as e:
-        # 记录错误
-        duration_ms = int((time.time() - start_time) * 1000)
-        record_usage(
-            session=session,
-            user_id=user.id,
-            credential_id=credential.id,
-            model_name=model_name,
-            request_type="chat_completion_stream",
-            request_duration_ms=duration_ms,
-            status="error",
-            error_message=str(e),
-        )
-
         logger.error("Stream error for user %s: %s", user.email, str(e))
         raise
 
