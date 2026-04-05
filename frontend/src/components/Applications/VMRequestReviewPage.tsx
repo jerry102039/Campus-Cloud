@@ -513,9 +513,7 @@ export function VMRequestReviewPage({ requestId }: { requestId: string }) {
           <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
             <span>
               策略：{" "}
-              {previewSummary.strategy === "priority_dominant_share"
-                ? "Priority Dominant Share"
-                : "Dominant Share Min"}
+              Priority 排程，未設定節點權重時平均分配
             </span>
             <span>
               建議節點：{" "}

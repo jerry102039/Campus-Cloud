@@ -19,7 +19,7 @@ class ProxmoxConfigPublic(BaseModel):
     gateway_ip: str | None = None  # 可能尚未設定（舊資料相容）
     local_subnet: str | None = None
     default_node: str | None = None
-    placement_strategy: str = "dominant_share_min"
+    placement_strategy: str = "priority_dominant_share"
     cpu_overcommit_ratio: float = 2.0
     disk_overcommit_ratio: float = 1.0
     updated_at: datetime | None = None
@@ -44,7 +44,7 @@ class ProxmoxConfigUpdate(BaseModel):
     gateway_ip: str | None = None
     local_subnet: str | None = None
     default_node: str | None = None
-    placement_strategy: str = "dominant_share_min"
+    placement_strategy: str = "priority_dominant_share"
     cpu_overcommit_ratio: float = Field(default=2.0, ge=1.0, le=8.0)
     disk_overcommit_ratio: float = Field(default=1.0, ge=1.0, le=5.0)
 

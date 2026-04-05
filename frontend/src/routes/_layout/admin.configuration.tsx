@@ -1186,7 +1186,7 @@ function AdminConfigPage() {
       gateway_ip: "",
       local_subnet: "",
       default_node: "",
-      placement_strategy: "dominant_share_min",
+      placement_strategy: "priority_dominant_share",
       cpu_overcommit_ratio: 2.0,
       disk_overcommit_ratio: 1.0,
     },
@@ -1207,7 +1207,7 @@ function AdminConfigPage() {
         gateway_ip: config.gateway_ip ?? "",
         local_subnet: config.local_subnet ?? "",
         default_node: config.default_node ?? "",
-        placement_strategy: config.placement_strategy ?? "dominant_share_min",
+        placement_strategy: "priority_dominant_share",
         cpu_overcommit_ratio: config.cpu_overcommit_ratio ?? 2.0,
         disk_overcommit_ratio: config.disk_overcommit_ratio ?? 1.0,
       })
@@ -1271,7 +1271,7 @@ function AdminConfigPage() {
       gateway_ip: data.gateway_ip || null,
       local_subnet: data.local_subnet || null,
       default_node: data.default_node || null,
-      placement_strategy: data.placement_strategy,
+      placement_strategy: "priority_dominant_share",
       cpu_overcommit_ratio: data.cpu_overcommit_ratio,
       disk_overcommit_ratio: data.disk_overcommit_ratio,
     }
@@ -1979,6 +1979,7 @@ function AdminConfigPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
+                    <div className="hidden">
                     {/* Strategy radio cards */}
                     <FormField
                       control={form.control}
@@ -2039,6 +2040,21 @@ function AdminConfigPage() {
                     />
 
                     <Separator />
+                    </div>
+
+                    <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">Priority 排程</p>
+                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                            系統固定先依節點 Priority 排序；若 Priority 相同，會自動平均分配到同級節點。
+                          </p>
+                        </div>
+                        <Badge variant="secondary" className="shrink-0">
+                          固定啟用
+                        </Badge>
+                      </div>
+                    </div>
 
                     {/* Overcommit sliders */}
                     <div className="grid gap-6 sm:grid-cols-2">

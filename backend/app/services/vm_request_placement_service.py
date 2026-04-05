@@ -36,7 +36,7 @@ def build_plan(
     placement_strategy: str | None = None,
     node_priorities: dict[str, int] | None = None,
 ) -> PlacementPlan:
-    strategy = placement_strategy or get_placement_strategy(session)
+    strategy = _normalize_strategy(placement_strategy or get_placement_strategy(session))
     priorities = node_priorities or get_node_priorities(session)
     working_nodes = [item.model_copy(deep=True) for item in node_capacities]
     required_cpu = advisor_service._effective_cpu_cores(request, effective_resource_type)
@@ -186,7 +186,9 @@ def select_current_target_node(
 
 def get_placement_strategy(session: Session) -> str:
     config = proxmox_config_repo.get_proxmox_config(session)
-    return config.placement_strategy if config else "dominant_share_min"
+    if not config:
+        return "priority_dominant_share"
+    return _normalize_strategy(config.placement_strategy)
 
 
 def get_overcommit_ratios(session: Session) -> tuple[float, float]:
@@ -232,23 +234,20 @@ def _placement_sort_key(
     ) / 3.0
     placement_count = placements.get(node.node, 0)
 
-    if strategy == "priority_dominant_share":
-        return (
-            priorities.get(node.node, 5),
-            placement_count,
-            dominant_share,
-            average_share,
-            projected_cpu_share,
-            node.node,
-        )
-
     return (
+        priorities.get(node.node, 5),
         placement_count,
         dominant_share,
         average_share,
         projected_cpu_share,
         node.node,
     )
+
+
+def _normalize_strategy(strategy: str | None) -> str:
+    # The scheduler now always respects node priority first.
+    # When priorities are equal, placement_count + dominant share keep distribution fair.
+    return "priority_dominant_share"
 
 
 def _projected_share(*, used: float | int, total: float | int) -> float:

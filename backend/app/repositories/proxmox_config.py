@@ -29,7 +29,7 @@ def upsert_proxmox_config(
     gateway_ip: str = "",
     local_subnet: str | None = None,
     default_node: str | None = None,
-    placement_strategy: str = "dominant_share_min",
+    placement_strategy: str = "priority_dominant_share",
     cpu_overcommit_ratio: float = 2.0,
     disk_overcommit_ratio: float = 1.0,
 ) -> ProxmoxConfig:
