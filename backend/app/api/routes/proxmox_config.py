@@ -11,9 +11,11 @@ from fastapi import APIRouter, Body, HTTPException
 
 from app.api.deps import AdminUser, SessionDep
 from app.exceptions import BadRequestError
+from app.models import AuditAction
 from app.repositories import proxmox_config as proxmox_config_repo
 from app.repositories import proxmox_node as proxmox_node_repo
 from app.repositories import proxmox_storage as proxmox_storage_repo
+from app.services import audit_service
 from app.schemas.proxmox_config import (
     CertParseResult,
     ClusterPreviewResult,
@@ -84,6 +86,14 @@ def _to_public(config, *, is_configured: bool) -> ProxmoxConfigPublic:
         migration_worker_concurrency=config.migration_worker_concurrency,
         migration_job_claim_timeout_seconds=config.migration_job_claim_timeout_seconds,
         migration_retry_backoff_seconds=config.migration_retry_backoff_seconds,
+        migration_lxc_live_enabled=config.migration_lxc_live_enabled,
+        rebalance_cpu_peak_warn_share=config.rebalance_cpu_peak_warn_share,
+        rebalance_cpu_peak_high_share=config.rebalance_cpu_peak_high_share,
+        rebalance_memory_peak_warn_share=config.rebalance_memory_peak_warn_share,
+        rebalance_memory_peak_high_share=config.rebalance_memory_peak_high_share,
+        rebalance_resource_weight_cpu=config.rebalance_resource_weight_cpu,
+        rebalance_resource_weight_memory=config.rebalance_resource_weight_memory,
+        rebalance_resource_weight_disk=config.rebalance_resource_weight_disk,
         updated_at=config.updated_at,
         is_configured=is_configured,
         has_ca_cert=bool(config.ca_cert),
@@ -212,6 +222,14 @@ def get_proxmox_config(session: SessionDep, current_user: AdminUser) -> Any:
             migration_worker_concurrency=2,
             migration_job_claim_timeout_seconds=300,
             migration_retry_backoff_seconds=120,
+            migration_lxc_live_enabled=False,
+            rebalance_cpu_peak_warn_share=0.7,
+            rebalance_cpu_peak_high_share=1.2,
+            rebalance_memory_peak_warn_share=0.8,
+            rebalance_memory_peak_high_share=0.85,
+            rebalance_resource_weight_cpu=1.0,
+            rebalance_resource_weight_memory=1.0,
+            rebalance_resource_weight_disk=1.0,
             updated_at=None,
             is_configured=False,
             has_ca_cert=False,
@@ -273,10 +291,25 @@ def update_proxmox_config(
         migration_worker_concurrency=config_in.migration_worker_concurrency,
         migration_job_claim_timeout_seconds=config_in.migration_job_claim_timeout_seconds,
         migration_retry_backoff_seconds=config_in.migration_retry_backoff_seconds,
+        migration_lxc_live_enabled=config_in.migration_lxc_live_enabled,
+        rebalance_cpu_peak_warn_share=config_in.rebalance_cpu_peak_warn_share,
+        rebalance_cpu_peak_high_share=config_in.rebalance_cpu_peak_high_share,
+        rebalance_memory_peak_warn_share=config_in.rebalance_memory_peak_warn_share,
+        rebalance_memory_peak_high_share=config_in.rebalance_memory_peak_high_share,
+        rebalance_resource_weight_cpu=config_in.rebalance_resource_weight_cpu,
+        rebalance_resource_weight_memory=config_in.rebalance_resource_weight_memory,
+        rebalance_resource_weight_disk=config_in.rebalance_resource_weight_disk,
     )
 
     from app.core.proxmox import invalidate_proxmox_client
     invalidate_proxmox_client()
+
+    audit_service.log_action(
+        session=session,
+        user_id=current_user.id,
+        action=AuditAction.proxmox_config_update,
+        details=f"Updated Proxmox config: host={config_in.host} user={config_in.user}",
+    )
 
     return _to_public(config, is_configured=True)
 
@@ -360,6 +393,16 @@ def sync_nodes(
     from app.core.proxmox import invalidate_proxmox_client
     invalidate_proxmox_client()
 
+    audit_service.log_action(
+        session=session,
+        user_id=current_user.id,
+        action=AuditAction.proxmox_sync_nodes,
+        details=(
+            f"Synced {len(saved)} cluster nodes: "
+            + ", ".join(n.name for n in saved)
+        ),
+    )
+
     return [_node_to_public(n) for n in saved]
 
 
@@ -406,6 +449,15 @@ def update_node(
     )
     if node is None:
         raise HTTPException(status_code=404, detail="Node not found")
+    audit_service.log_action(
+        session=session,
+        user_id=current_user.id,
+        action=AuditAction.proxmox_node_update,
+        details=(
+            f"Updated node {node.name}: host={node_in.host} "
+            f"port={node_in.port} priority={node_in.priority}"
+        ),
+    )
     return _node_to_public(node)
 
 
@@ -435,6 +487,15 @@ def update_storage(
     )
     if s is None:
         raise HTTPException(status_code=404, detail="Storage not found")
+    audit_service.log_action(
+        session=session,
+        user_id=current_user.id,
+        action=AuditAction.proxmox_storage_update,
+        details=(
+            f"Updated storage {s.storage}: enabled={storage_in.enabled} "
+            f"speed_tier={storage_in.speed_tier} priority={storage_in.user_priority}"
+        ),
+    )
     return _storage_to_public(s)
 
 
@@ -527,6 +588,16 @@ def sync_now(
 
         from app.core.proxmox import invalidate_proxmox_client
         invalidate_proxmox_client()
+
+        audit_service.log_action(
+            session=session,
+            user_id=current_user.id,
+            action=AuditAction.proxmox_sync_now,
+            details=(
+                f"Sync-now: {len(saved_nodes)} nodes, "
+                f"{len(saved_storages)} storages"
+            ),
+        )
 
         return SyncNowResult(
             success=True,
