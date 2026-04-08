@@ -1,4 +1,4 @@
-from . import group
+from . import gateway_config, group, reverse_proxy
 from .audit_log import (
     create_audit_log,
     get_audit_logs,
@@ -27,6 +27,15 @@ from .user import (
     create_user,
     get_user_by_email,
     update_user,
+)
+from .vm_migration_job import (
+    cancel_pending_jobs_for_request,
+    claim_jobs_for_requests,
+    create_or_update_pending_job,
+    get_latest_job_for_request,
+    get_open_job_for_request,
+    list_pending_jobs_for_requests,
+    update_job_status,
 )
 from .vm_request import (
     create_vm_request,

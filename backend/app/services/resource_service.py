@@ -1,28 +1,87 @@
 import logging
 import time
 import uuid
+from datetime import UTC, datetime
 
 from sqlmodel import Session
 
 from app.exceptions import BadRequestError, ProxmoxError
+from app.repositories import vm_request as vm_request_repo
 from app.schemas import ResourcePublic
 from app.repositories import resource as resource_repo
+from app.repositories import audit_log as audit_log_repo
 from app.services import audit_service, firewall_service, proxmox_service
 
 logger = logging.getLogger(__name__)
 
 
-def _get_ip_address(node: str, vmid: int, vm_type: str) -> str | None:
-    return proxmox_service.get_ip_address(node, vmid, vm_type)
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _enforce_start_window(*, session: Session, vmid: int) -> None:
+    request = vm_request_repo.get_latest_approved_vm_request_by_vmid(
+        session=session,
+        vmid=vmid,
+    )
+    if not request or not request.start_at or not request.end_at:
+        return
+
+    now = _utc_now()
+    start_at = request.start_at
+    end_at = request.end_at
+    if start_at.tzinfo is None:
+        start_at = start_at.replace(tzinfo=UTC)
+    if end_at.tzinfo is None:
+        end_at = end_at.replace(tzinfo=UTC)
+
+    if now < start_at:
+        raise BadRequestError("This resource can only be started when its approved time window begins.")
+    if now >= end_at:
+        raise BadRequestError("This resource can no longer be started because its approved time window has ended.")
+
+
+def _from_punycode_hostname(hostname: str) -> str:
+    """將 Punycode hostname 解碼回 Unicode 顯示給使用者。"""
+    result_labels = []
+    for label in hostname.split("."):
+        if label.lower().startswith("xn--"):
+            try:
+                decoded = label[4:].encode("ascii").decode("punycode")
+                result_labels.append(decoded)
+            except Exception:
+                result_labels.append(label)
+        else:
+            result_labels.append(label)
+    return ".".join(result_labels)
 
 
 def _build_resource_public(
-    resource: dict, db_resource, node: str, vm_type: str
+    resource: dict, db_resource, node: str, vm_type: str,
+    session: Session | None = None,
 ) -> ResourcePublic:
-    ip_address = _get_ip_address(node, resource.get("vmid"), vm_type)
+    vmid = resource.get("vmid")
+    ip_address = proxmox_service.get_ip_address(node, vmid, vm_type)
+    if ip_address:
+        if session is not None:
+            try:
+                resource_repo.update_ip_address(
+                    session=session, vmid=vmid, ip_address=ip_address
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to update cached IP address for vmid=%s ip_address=%s",
+                    vmid,
+                    ip_address,
+                    exc_info=True,
+                )
+    else:
+        # VM 離線時用 DB 快取
+        if db_resource and db_resource.ip_address:
+            ip_address = db_resource.ip_address
     return ResourcePublic(
         vmid=resource.get("vmid"),
-        name=resource.get("name", ""),
+        name=_from_punycode_hostname(resource.get("name", "")),
         status=resource.get("status", ""),
         node=node,
         type=vm_type,
@@ -54,7 +113,7 @@ def list_all(
                 session=session, vmid=vmid
             )
             result.append(
-                _build_resource_public(r, db_resource, vm_node, vm_type)
+                _build_resource_public(r, db_resource, vm_node, vm_type, session)
             )
         return result
     except Exception as e:
@@ -85,7 +144,7 @@ def list_by_user(
             vm_node = r.get("node")
             result.append(
                 _build_resource_public(
-                    r, owned_vmids[vmid], vm_node, vm_type
+                    r, owned_vmids[vmid], vm_node, vm_type, session
                 )
             )
         return result
@@ -120,6 +179,9 @@ def control(
     try:
         node = resource_info["node"]
         resource_type = resource_info["type"]
+
+        if action == "start":
+            _enforce_start_window(session=session, vmid=vmid)
 
         proxmox_service.control(node, vmid, resource_type, action)
 
@@ -192,8 +254,9 @@ def delete(
 
         proxmox_service.delete_resource(node, vmid, resource_type, **delete_params)
 
-        # Remove from database
+        # Remove from database (resource record + all associated audit logs)
         resource_repo.delete_resource(session=session, vmid=vmid)
+        audit_log_repo.delete_audit_logs_by_vmid(session=session, vmid=vmid)
 
         audit_service.log_action(
             session=session,

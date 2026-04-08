@@ -4,8 +4,10 @@ from app.ai.pve_advisor.router import router as ai_pve_advisor_router
 from app.ai.template_recommendation.router import router as ai_template_recommendation_router
 from app.api.routes import (
     ai_api,
+    ai_proxy,
     audit_logs,
     firewall,
+    gateway,
     groups,
     login,
     lxc,
@@ -13,6 +15,7 @@ from app.api.routes import (
     proxmox_config,
     resource_details,
     resources,
+    script_deploy,
     spec_change_requests,
     users,
     utils,
@@ -31,6 +34,7 @@ api_router.include_router(vm.router)
 api_router.include_router(lxc.router)
 api_router.include_router(vm_requests.router)
 api_router.include_router(ai_api.router)
+api_router.include_router(ai_proxy.router)
 api_router.include_router(ai_pve_advisor_router)
 api_router.include_router(ai_template_recommendation_router)
 api_router.include_router(spec_change_requests.router)
@@ -38,6 +42,8 @@ api_router.include_router(audit_logs.router)
 api_router.include_router(groups.router)
 api_router.include_router(proxmox_config.router)
 api_router.include_router(firewall.router)
+api_router.include_router(gateway.router)
+api_router.include_router(script_deploy.router)
 
 
 if settings.ENVIRONMENT == "local":

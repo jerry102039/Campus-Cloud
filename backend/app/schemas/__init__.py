@@ -13,10 +13,19 @@ API 請求/回應 schemas，按領域分檔：
 from .ai_api import (
     AIAPICredentialPublic,
     AIAPICredentialsPublic,
+    AIAPICredentialUpdate,
     AIAPIRequestCreate,
     AIAPIRequestPublic,
     AIAPIRequestReview,
     AIAPIRequestsPublic,
+)
+from .ai_proxy import (
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ChatMessage,
+    ModelsResponse,
+    RateLimitStatusResponse,
+    UsageStatsResponse,
 )
 from .audit_log import AuditLogPublic, AuditLogsPublic
 from .common import Message, NewPassword, Token, TokenPayload
@@ -57,8 +66,20 @@ from .user import (
     UserUpdateMe,
 )
 from .vm_request import (
+    VMRequestAvailabilityDay,
+    VMRequestAvailabilityNodeSnapshot,
+    VMRequestAvailabilityRequest,
+    VMRequestAvailabilityResponse,
+    VMRequestAvailabilityStackItem,
+    VMRequestAvailabilitySlot,
+    VMRequestAvailabilitySummary,
     VMRequestCreate,
+    VMRequestPlacementPreview,
     VMRequestPublic,
+    VMRequestReviewContext,
+    VMRequestReviewOverlapItem,
+    VMRequestReviewProjectedNode,
+    VMRequestReviewRuntimeResource,
     VMRequestReview,
     VMRequestsPublic,
 )
@@ -78,6 +99,7 @@ from .firewall import (
     FirewallRulePublic,
     FirewallRuleUpdate,
     LayoutUpdate,
+    NATRulePublic,
     PortSpec,
     TopologyEdge,
     TopologyNode,
@@ -88,6 +110,11 @@ from .proxmox_config import (
     ProxmoxConfigUpdate,
     ProxmoxConnectionTestResult,
 )
+from .script_deploy import (
+    ScriptDeployRequest,
+    ScriptDeployResponse,
+    ScriptDeployStatus,
+)
 
 __all__ = [
     # Common
@@ -95,12 +122,21 @@ __all__ = [
     "Token",
     "TokenPayload",
     "NewPassword",
+    # AI API
     "AIAPIRequestCreate",
     "AIAPIRequestReview",
     "AIAPIRequestPublic",
     "AIAPIRequestsPublic",
     "AIAPICredentialPublic",
     "AIAPICredentialsPublic",
+    "AIAPICredentialUpdate",
+    # AI Proxy
+    "ChatMessage",
+    "ChatCompletionRequest",
+    "ChatCompletionResponse",
+    "ModelsResponse",
+    "UsageStatsResponse",
+    "RateLimitStatusResponse",
     # User
     "UserCreate",
     "UserRegister",
@@ -130,9 +166,21 @@ __all__ = [
     "SnapshotResponse",
     "DirectSpecUpdateRequest",
     # VM Request
+    "VMRequestAvailabilityRequest",
+    "VMRequestAvailabilitySlot",
+    "VMRequestAvailabilityStackItem",
+    "VMRequestAvailabilityNodeSnapshot",
+    "VMRequestAvailabilityDay",
+    "VMRequestAvailabilitySummary",
+    "VMRequestAvailabilityResponse",
     "VMRequestCreate",
+    "VMRequestPlacementPreview",
     "VMRequestReview",
     "VMRequestPublic",
+    "VMRequestReviewContext",
+    "VMRequestReviewOverlapItem",
+    "VMRequestReviewProjectedNode",
+    "VMRequestReviewRuntimeResource",
     "VMRequestsPublic",
     # Audit Log
     "AuditLogPublic",
@@ -161,8 +209,13 @@ __all__ = [
     "TopologyNode",
     "TopologyEdge",
     "TopologyResponse",
+    "NATRulePublic",
     # Proxmox Config
     "ProxmoxConfigPublic",
     "ProxmoxConfigUpdate",
     "ProxmoxConnectionTestResult",
+    # Script Deploy
+    "ScriptDeployRequest",
+    "ScriptDeployResponse",
+    "ScriptDeployStatus",
 ]

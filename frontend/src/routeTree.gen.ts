@@ -31,7 +31,9 @@ import { Route as LayoutAdminIndexRouteImport } from './routes/_layout/admin.ind
 import { Route as LayoutResourcesVmidRouteImport } from './routes/_layout/resources_.$vmid'
 import { Route as LayoutMyResourcesVmidRouteImport } from './routes/_layout/my-resources_.$vmid'
 import { Route as LayoutGroupsGroupIdRouteImport } from './routes/_layout/groups_.$groupId'
-import { Route as LayoutAdminProxmoxRouteImport } from './routes/_layout/admin.proxmox'
+import { Route as LayoutApprovalsRequestIdRouteImport } from './routes/_layout/approvals_.$requestId'
+import { Route as LayoutAdminGatewayRouteImport } from './routes/_layout/admin.gateway'
+import { Route as LayoutAdminConfigurationRouteImport } from './routes/_layout/admin.configuration'
 import { Route as LayoutAdminAuditLogsRouteImport } from './routes/_layout/admin.audit-logs'
 
 const SignupRoute = SignupRouteImport.update({
@@ -144,11 +146,23 @@ const LayoutGroupsGroupIdRoute = LayoutGroupsGroupIdRouteImport.update({
   path: '/groups/$groupId',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutAdminProxmoxRoute = LayoutAdminProxmoxRouteImport.update({
-  id: '/proxmox',
-  path: '/proxmox',
+const LayoutApprovalsRequestIdRoute =
+  LayoutApprovalsRequestIdRouteImport.update({
+    id: '/approvals_/$requestId',
+    path: '/approvals/$requestId',
+    getParentRoute: () => LayoutRoute,
+  } as any)
+const LayoutAdminGatewayRoute = LayoutAdminGatewayRouteImport.update({
+  id: '/gateway',
+  path: '/gateway',
   getParentRoute: () => LayoutAdminRoute,
 } as any)
+const LayoutAdminConfigurationRoute =
+  LayoutAdminConfigurationRouteImport.update({
+    id: '/configuration',
+    path: '/configuration',
+    getParentRoute: () => LayoutAdminRoute,
+  } as any)
 const LayoutAdminAuditLogsRoute = LayoutAdminAuditLogsRouteImport.update({
   id: '/audit-logs',
   path: '/audit-logs',
@@ -174,7 +188,9 @@ export interface FileRoutesByFullPath {
   '/resources-create': typeof LayoutResourcesCreateRoute
   '/settings': typeof LayoutSettingsRoute
   '/admin/audit-logs': typeof LayoutAdminAuditLogsRoute
-  '/admin/proxmox': typeof LayoutAdminProxmoxRoute
+  '/admin/configuration': typeof LayoutAdminConfigurationRoute
+  '/admin/gateway': typeof LayoutAdminGatewayRoute
+  '/approvals/$requestId': typeof LayoutApprovalsRequestIdRoute
   '/groups/$groupId': typeof LayoutGroupsGroupIdRoute
   '/my-resources/$vmid': typeof LayoutMyResourcesVmidRoute
   '/resources/$vmid': typeof LayoutResourcesVmidRoute
@@ -198,7 +214,9 @@ export interface FileRoutesByTo {
   '/settings': typeof LayoutSettingsRoute
   '/': typeof LayoutIndexRoute
   '/admin/audit-logs': typeof LayoutAdminAuditLogsRoute
-  '/admin/proxmox': typeof LayoutAdminProxmoxRoute
+  '/admin/configuration': typeof LayoutAdminConfigurationRoute
+  '/admin/gateway': typeof LayoutAdminGatewayRoute
+  '/approvals/$requestId': typeof LayoutApprovalsRequestIdRoute
   '/groups/$groupId': typeof LayoutGroupsGroupIdRoute
   '/my-resources/$vmid': typeof LayoutMyResourcesVmidRoute
   '/resources/$vmid': typeof LayoutResourcesVmidRoute
@@ -225,7 +243,9 @@ export interface FileRoutesById {
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/': typeof LayoutIndexRoute
   '/_layout/admin/audit-logs': typeof LayoutAdminAuditLogsRoute
-  '/_layout/admin/proxmox': typeof LayoutAdminProxmoxRoute
+  '/_layout/admin/configuration': typeof LayoutAdminConfigurationRoute
+  '/_layout/admin/gateway': typeof LayoutAdminGatewayRoute
+  '/_layout/approvals_/$requestId': typeof LayoutApprovalsRequestIdRoute
   '/_layout/groups_/$groupId': typeof LayoutGroupsGroupIdRoute
   '/_layout/my-resources_/$vmid': typeof LayoutMyResourcesVmidRoute
   '/_layout/resources_/$vmid': typeof LayoutResourcesVmidRoute
@@ -252,7 +272,9 @@ export interface FileRouteTypes {
     | '/resources-create'
     | '/settings'
     | '/admin/audit-logs'
-    | '/admin/proxmox'
+    | '/admin/configuration'
+    | '/admin/gateway'
+    | '/approvals/$requestId'
     | '/groups/$groupId'
     | '/my-resources/$vmid'
     | '/resources/$vmid'
@@ -276,7 +298,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/'
     | '/admin/audit-logs'
-    | '/admin/proxmox'
+    | '/admin/configuration'
+    | '/admin/gateway'
+    | '/approvals/$requestId'
     | '/groups/$groupId'
     | '/my-resources/$vmid'
     | '/resources/$vmid'
@@ -302,7 +326,9 @@ export interface FileRouteTypes {
     | '/_layout/settings'
     | '/_layout/'
     | '/_layout/admin/audit-logs'
-    | '/_layout/admin/proxmox'
+    | '/_layout/admin/configuration'
+    | '/_layout/admin/gateway'
+    | '/_layout/approvals_/$requestId'
     | '/_layout/groups_/$groupId'
     | '/_layout/my-resources_/$vmid'
     | '/_layout/resources_/$vmid'
@@ -473,11 +499,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutGroupsGroupIdRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/admin/proxmox': {
-      id: '/_layout/admin/proxmox'
-      path: '/proxmox'
-      fullPath: '/admin/proxmox'
-      preLoaderRoute: typeof LayoutAdminProxmoxRouteImport
+    '/_layout/approvals_/$requestId': {
+      id: '/_layout/approvals_/$requestId'
+      path: '/approvals/$requestId'
+      fullPath: '/approvals/$requestId'
+      preLoaderRoute: typeof LayoutApprovalsRequestIdRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/admin/gateway': {
+      id: '/_layout/admin/gateway'
+      path: '/gateway'
+      fullPath: '/admin/gateway'
+      preLoaderRoute: typeof LayoutAdminGatewayRouteImport
+      parentRoute: typeof LayoutAdminRoute
+    }
+    '/_layout/admin/configuration': {
+      id: '/_layout/admin/configuration'
+      path: '/configuration'
+      fullPath: '/admin/configuration'
+      preLoaderRoute: typeof LayoutAdminConfigurationRouteImport
       parentRoute: typeof LayoutAdminRoute
     }
     '/_layout/admin/audit-logs': {
@@ -492,13 +532,15 @@ declare module '@tanstack/react-router' {
 
 interface LayoutAdminRouteChildren {
   LayoutAdminAuditLogsRoute: typeof LayoutAdminAuditLogsRoute
-  LayoutAdminProxmoxRoute: typeof LayoutAdminProxmoxRoute
+  LayoutAdminConfigurationRoute: typeof LayoutAdminConfigurationRoute
+  LayoutAdminGatewayRoute: typeof LayoutAdminGatewayRoute
   LayoutAdminIndexRoute: typeof LayoutAdminIndexRoute
 }
 
 const LayoutAdminRouteChildren: LayoutAdminRouteChildren = {
   LayoutAdminAuditLogsRoute: LayoutAdminAuditLogsRoute,
-  LayoutAdminProxmoxRoute: LayoutAdminProxmoxRoute,
+  LayoutAdminConfigurationRoute: LayoutAdminConfigurationRoute,
+  LayoutAdminGatewayRoute: LayoutAdminGatewayRoute,
   LayoutAdminIndexRoute: LayoutAdminIndexRoute,
 }
 
@@ -520,6 +562,7 @@ interface LayoutRouteChildren {
   LayoutResourcesCreateRoute: typeof LayoutResourcesCreateRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
+  LayoutApprovalsRequestIdRoute: typeof LayoutApprovalsRequestIdRoute
   LayoutGroupsGroupIdRoute: typeof LayoutGroupsGroupIdRoute
   LayoutMyResourcesVmidRoute: typeof LayoutMyResourcesVmidRoute
   LayoutResourcesVmidRoute: typeof LayoutResourcesVmidRoute
@@ -539,6 +582,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutResourcesCreateRoute: LayoutResourcesCreateRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutIndexRoute: LayoutIndexRoute,
+  LayoutApprovalsRequestIdRoute: LayoutApprovalsRequestIdRoute,
   LayoutGroupsGroupIdRoute: LayoutGroupsGroupIdRoute,
   LayoutMyResourcesVmidRoute: LayoutMyResourcesVmidRoute,
   LayoutResourcesVmidRoute: LayoutResourcesVmidRoute,

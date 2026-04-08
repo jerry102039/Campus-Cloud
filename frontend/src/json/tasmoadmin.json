@@ -1,9 +1,7 @@
 {
   "name": "TasmoAdmin",
   "slug": "tasmoadmin",
-  "categories": [
-    16
-  ],
+  "categories": [16],
   "date_created": "2024-05-02",
   "type": "ct",
   "updateable": true,
@@ -14,6 +12,8 @@
   "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/tasmoadmin.webp",
   "config_path": "",
   "description": "TasmoAdmin is an administrative platform for devices flashed with Tasmota.",
+  "description_zh": "TasmoAdmin 是一個用於刷有 Tasmota 之設備的管理平台。",
+  "description_ja": "TasmoAdminはTasmotaでフラッシュされたデバイス用の管理プラットフォームです。",
   "install_methods": [
     {
       "type": "default",

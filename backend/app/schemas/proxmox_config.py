@@ -18,6 +18,28 @@ class ProxmoxConfigPublic(BaseModel):
     pool_name: str
     gateway_ip: str | None = None  # 可能尚未設定（舊資料相容）
     local_subnet: str | None = None
+    default_node: str | None = None
+    placement_strategy: str = "priority_dominant_share"
+    cpu_overcommit_ratio: float = 2.0
+    disk_overcommit_ratio: float = 1.0
+    migration_enabled: bool = True
+    migration_max_per_rebalance: int = 2
+    migration_min_interval_minutes: int = 60
+    migration_retry_limit: int = 3
+    rebalance_migration_cost: float = 0.15
+    rebalance_peak_cpu_margin: float = 1.1
+    rebalance_peak_memory_margin: float = 1.05
+    rebalance_loadavg_warn_per_core: float = 0.8
+    rebalance_loadavg_max_per_core: float = 1.5
+    rebalance_loadavg_penalty_weight: float = 0.9
+    rebalance_disk_contention_warn_share: float = 0.7
+    rebalance_disk_contention_high_share: float = 0.9
+    rebalance_disk_penalty_weight: float = 0.75
+    rebalance_search_max_relocations: int = 2
+    rebalance_search_depth: int = 3
+    migration_worker_concurrency: int = 2
+    migration_job_claim_timeout_seconds: int = 300
+    migration_retry_backoff_seconds: int = 120
     updated_at: datetime | None = None
     is_configured: bool
     has_ca_cert: bool
@@ -37,8 +59,30 @@ class ProxmoxConfigUpdate(BaseModel):
     task_check_interval: int = Field(default=2, ge=1, le=60)
     pool_name: str = "CampusCloud"
     ca_cert: str | None = None  # None 表示不更新；空字串表示清除
-    gateway_ip: str  # 必填
+    gateway_ip: str | None = None
     local_subnet: str | None = None
+    default_node: str | None = None
+    placement_strategy: str = "priority_dominant_share"
+    cpu_overcommit_ratio: float = Field(default=2.0, ge=1.0, le=8.0)
+    disk_overcommit_ratio: float = Field(default=1.0, ge=1.0, le=5.0)
+    migration_enabled: bool = True
+    migration_max_per_rebalance: int = Field(default=2, ge=0, le=20)
+    migration_min_interval_minutes: int = Field(default=60, ge=0, le=10080)
+    migration_retry_limit: int = Field(default=3, ge=0, le=10)
+    rebalance_migration_cost: float = Field(default=0.15, ge=0.0, le=5.0)
+    rebalance_peak_cpu_margin: float = Field(default=1.1, ge=1.0, le=2.0)
+    rebalance_peak_memory_margin: float = Field(default=1.05, ge=1.0, le=2.0)
+    rebalance_loadavg_warn_per_core: float = Field(default=0.8, ge=0.0, le=4.0)
+    rebalance_loadavg_max_per_core: float = Field(default=1.5, ge=0.1, le=8.0)
+    rebalance_loadavg_penalty_weight: float = Field(default=0.9, ge=0.0, le=5.0)
+    rebalance_disk_contention_warn_share: float = Field(default=0.7, ge=0.0, le=1.5)
+    rebalance_disk_contention_high_share: float = Field(default=0.9, ge=0.1, le=2.0)
+    rebalance_disk_penalty_weight: float = Field(default=0.75, ge=0.0, le=5.0)
+    rebalance_search_max_relocations: int = Field(default=2, ge=0, le=10)
+    rebalance_search_depth: int = Field(default=3, ge=0, le=10)
+    migration_worker_concurrency: int = Field(default=2, ge=1, le=20)
+    migration_job_claim_timeout_seconds: int = Field(default=300, ge=30, le=86400)
+    migration_retry_backoff_seconds: int = Field(default=120, ge=0, le=86400)
 
 
 class CertParseResult(BaseModel):
@@ -70,6 +114,15 @@ class ProxmoxNodePublic(BaseModel):
     is_primary: bool
     is_online: bool
     last_checked: datetime | None = None
+    priority: int = 5
+
+
+class ProxmoxNodeUpdate(BaseModel):
+    """更新單一節點設定的請求 schema"""
+
+    host: str
+    port: int = Field(default=8006, ge=1, le=65535)
+    priority: int = Field(default=5, ge=1, le=10)
 
 
 class ClusterPreviewResult(BaseModel):
@@ -81,6 +134,73 @@ class ClusterPreviewResult(BaseModel):
     error: str | None = None
 
 
+class ProxmoxStoragePublic(BaseModel):
+    """回傳給前端的 Storage 資訊"""
+
+    id: int
+    node_name: str
+    storage: str
+    storage_type: str | None = None
+    total_gb: float
+    used_gb: float
+    avail_gb: float
+    can_vm: bool
+    can_lxc: bool
+    can_iso: bool
+    can_backup: bool
+    is_shared: bool
+    active: bool
+    enabled: bool
+    speed_tier: str   # "nvme"|"ssd"|"hdd"|"unknown"
+    user_priority: int
+
+
+class ProxmoxStorageUpdate(BaseModel):
+    """更新 Storage 使用者設定的請求 schema"""
+
+    enabled: bool
+    speed_tier: str = Field(pattern=r"^(nvme|ssd|hdd|unknown)$")
+    user_priority: int = Field(ge=1, le=10)
+
+
+class SyncNowResult(BaseModel):
+    """同步節點與 Storage 結果"""
+
+    success: bool
+    nodes: list[ProxmoxNodePublic]
+    storage_count: int
+    error: str | None = None
+
+
+class NodeStatsPublic(BaseModel):
+    """單一節點的即時資源使用狀態"""
+
+    name: str
+    status: str
+    cpu_usage_pct: float   # 0–100
+    cpu_cores: int
+    mem_used_gb: float
+    mem_total_gb: float
+    disk_used_gb: float
+    disk_total_gb: float
+    vm_count: int = 0
+
+
+class ClusterStatsPublic(BaseModel):
+    """整個叢集的資源加總與各節點狀態"""
+
+    nodes: list[NodeStatsPublic]
+    total_cpu_cores: int
+    used_cpu_cores: float   # weighted sum from cpu_ratio * maxcpu
+    total_mem_gb: float
+    used_mem_gb: float
+    total_disk_gb: float
+    used_disk_gb: float
+    online_count: int
+    offline_count: int
+    total_vm_count: int
+
+
 __all__ = [
     "ProxmoxConfigPublic",
     "ProxmoxConfigUpdate",
@@ -88,4 +208,10 @@ __all__ = [
     "CertParseResult",
     "ProxmoxNodePublic",
     "ClusterPreviewResult",
+    "ProxmoxNodeUpdate",
+    "ProxmoxStoragePublic",
+    "ProxmoxStorageUpdate",
+    "SyncNowResult",
+    "NodeStatsPublic",
+    "ClusterStatsPublic",
 ]

@@ -8,11 +8,14 @@ API schemas 已移至 app.schemas 模組。
 from sqlmodel import SQLModel
 
 from .ai_api_credential import AIAPICredential
+from .ai_api_rate_limit import AIAPIRateLimit
 from .ai_api_request import AIAPIRequest, AIAPIRequestStatus
+from .ai_api_usage import AIAPIUsage
 from .base import get_datetime_utc
 from .resource import Resource
 from .user import User, UserBase, UserRole
-from .vm_request import VMRequest, VMRequestStatus
+from .vm_migration_job import VMMigrationJob, VMMigrationJobStatus
+from .vm_request import VMMigrationStatus, VMRequest, VMRequestStatus
 from .audit_log import AuditAction, AuditLog
 from .spec_change_request import (
     SpecChangeRequest,
@@ -23,7 +26,11 @@ from .group import Group
 from .group_member import GroupMember
 from .proxmox_config import ProxmoxConfig
 from .proxmox_node import ProxmoxNode
+from .proxmox_storage import ProxmoxStorage
 from .firewall_layout import FirewallLayout
+from .nat_rule import NatRule
+from .gateway_config import GatewayConfig
+from .reverse_proxy_rule import ReverseProxyRule
 
 __all__ = [
     # Base
@@ -33,12 +40,18 @@ __all__ = [
     "UserBase",
     "User",
     "UserRole",
+    # AI API
     "AIAPICredential",
     "AIAPIRequest",
     "AIAPIRequestStatus",
+    "AIAPIUsage",
+    "AIAPIRateLimit",
     # Resource
     "Resource",
+    "VMMigrationJob",
+    "VMMigrationJobStatus",
     # VM Request
+    "VMMigrationStatus",
     "VMRequest",
     "VMRequestStatus",
     # Audit Log
@@ -55,6 +68,14 @@ __all__ = [
     "ProxmoxConfig",
     # Proxmox Nodes
     "ProxmoxNode",
+    # Proxmox Storages
+    "ProxmoxStorage",
     # Firewall Layout
     "FirewallLayout",
+    # NAT Rules
+    "NatRule",
+    # Gateway Config
+    "GatewayConfig",
+    # Reverse Proxy Rules
+    "ReverseProxyRule",
 ]

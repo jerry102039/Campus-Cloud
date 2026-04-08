@@ -66,16 +66,24 @@ def get_available_nodes() -> list[dict]:
 
 
 def pick_target_node(preferred_node: str | None = None) -> str:
-    """Pick a usable target node, preferring an explicitly requested one."""
+    """Pick a usable target node, preferring an explicitly requested one.
+
+    Priority: preferred_node > settings.default_node > nodes[0]
+    """
     nodes = get_available_nodes()
     if not nodes:
         raise ProxmoxError("No Proxmox nodes are available")
 
-    if preferred_node:
+    candidate = preferred_node or get_proxmox_settings().default_node
+    if candidate:
         for node in nodes:
             node_name = node.get("node") or node.get("name")
-            if node_name == preferred_node:
+            if node_name == candidate:
                 return node_name
+        logger.warning(
+            "Preferred node '%s' not found or offline; falling back to first available node",
+            candidate,
+        )
 
     selected = nodes[0].get("node") or nodes[0].get("name")
     if not selected:
@@ -287,20 +295,61 @@ def delete_resource(
     return task
 
 
+def migrate_resource(
+    source_node: str,
+    target_node: str,
+    vmid: int,
+    resource_type: ResourceType,
+    *,
+    online: bool = True,
+    with_local_disks: bool = True,
+) -> str:
+    if source_node == target_node:
+        raise BadRequestError("Source and target nodes must be different for migration")
+
+    params: dict[str, int | str] = {"target": target_node}
+    if resource_type == "qemu":
+        if online:
+            params["online"] = 1
+        if with_local_disks:
+            params["with-local-disks"] = 1
+    else:
+        if online:
+            params["restart"] = 1
+
+    task = _resource_api(source_node, vmid, resource_type).migrate.post(**params)
+    basic_blocking_task_status(source_node, task)
+    return task
+
+
 # ---------------------------------------------------------------------------
 # IP address
 # ---------------------------------------------------------------------------
 
+def _is_usable_ipv4(ip: str) -> bool:
+    """過濾 loopback、link-local 等不可用的 IPv4 位址"""
+    return (
+        bool(ip)
+        and not ip.startswith("127.")
+        and not ip.startswith("169.254.")
+        and ip != "0.0.0.0"
+    )
+
+
 def get_ip_address(node: str, vmid: int, resource_type: ResourceType) -> str | None:
+    """取得 VM 的 IP 位址，掃描全部網卡（跳過 loopback / link-local）。"""
     proxmox = get_proxmox_api()
     try:
         if resource_type == "lxc":
             interfaces = proxmox.nodes(node).lxc(vmid).interfaces.get()
-            for iface in interfaces:
-                if iface.get("name") in ["eth0", "net0"]:
-                    inet = iface.get("inet")
-                    if inet:
-                        return inet.split("/")[0]
+            for iface in interfaces or []:
+                if iface.get("name") == "lo":
+                    continue
+                inet = iface.get("inet")
+                if inet:
+                    ip = inet.split("/")[0]
+                    if _is_usable_ipv4(ip):
+                        return ip
         else:
             try:
                 network_info = (
@@ -310,13 +359,13 @@ def get_ip_address(node: str, vmid: int, resource_type: ResourceType) -> str | N
                 )
                 if network_info and "result" in network_info:
                     for iface in network_info["result"]:
-                        if iface.get("name") in ["eth0", "ens18"]:
-                            for ip in iface.get("ip-addresses", []):
-                                if (
-                                    ip.get("ip-address-type") == "ipv4"
-                                    and not ip.get("ip-address", "").startswith("127.")
-                                ):
-                                    return ip.get("ip-address")
+                        if iface.get("name") == "lo":
+                            continue
+                        for ip_entry in iface.get("ip-addresses", []):
+                            if ip_entry.get("ip-address-type") == "ipv4":
+                                ip = ip_entry.get("ip-address", "")
+                                if _is_usable_ipv4(ip):
+                                    return ip
             except Exception:
                 pass
     except Exception as e:

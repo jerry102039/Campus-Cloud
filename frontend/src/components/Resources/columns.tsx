@@ -4,7 +4,7 @@ import { Container, InfinityIcon, Monitor } from "lucide-react"
 
 import type { ResourcePublic } from "@/client"
 import { VMActions } from "@/components/Resources/VMActions"
-import { cn } from "@/lib/utils"
+import { cn, decodeName } from "@/lib/utils"
 
 function StatusBadge({
   status,
@@ -69,7 +69,7 @@ export const createColumns = (
           <TypeIcon type={row.original.type} />
         </div>
         <div className="flex flex-col">
-          <span className="font-medium">{row.original.name}</span>
+          <span className="font-medium">{decodeName(row.original.name)}</span>
           <TypeLabel type={row.original.type} t={t} />
         </div>
       </div>
@@ -141,4 +141,7 @@ export const createColumns = (
 
 const noopT = ((key: string) => key) as TFunction
 
-export const columns: ColumnDef<ResourcePublic>[] = createColumns(noopT, () => {})
+export const columns: ColumnDef<ResourcePublic>[] = createColumns(
+  noopT,
+  () => {},
+)
