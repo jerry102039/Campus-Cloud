@@ -12,7 +12,8 @@ from app.api.deps.database import SessionDep, get_db
 from app.core import security
 from app.core.config import settings
 from app.core.db import engine
-from app.exceptions import AuthenticationError, PermissionDeniedError
+from app.core.permissions import Permission, require_permission
+from app.exceptions import AuthenticationError
 from app.models import User
 from app.schemas import TokenPayload
 
@@ -55,8 +56,11 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 def get_current_active_superuser(current_user: CurrentUser) -> User:
-    if not current_user.is_superuser:
-        raise PermissionDeniedError("The user doesn't have enough privileges")
+    require_permission(
+        current_user,
+        Permission.ADMIN_ACCESS,
+        detail="The user doesn't have enough privileges",
+    )
     return current_user
 
 
@@ -64,6 +68,11 @@ AdminUser = Annotated[User, Depends(get_current_active_superuser)]
 
 
 def get_current_instructor_or_admin(current_user: CurrentUser) -> User:
+    require_permission(
+        current_user,
+        Permission.VM_REQUEST_USE_IMMEDIATE_MODE,
+        detail="The user doesn't have enough privileges",
+    )
     return current_user
 
 

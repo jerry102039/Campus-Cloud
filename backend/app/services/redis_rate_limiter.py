@@ -9,7 +9,10 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from redis.asyncio import Redis
+try:
+    from redis.asyncio import Redis
+except ModuleNotFoundError:  # pragma: no cover - depends on local env
+    Redis = Any  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 

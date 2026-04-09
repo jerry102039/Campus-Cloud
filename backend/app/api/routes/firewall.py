@@ -11,6 +11,7 @@ from app.api.deps import (
     SessionDep,
     check_firewall_access,
 )
+from app.core.permissions import Permission, has_permission
 from app.exceptions import BadRequestError, NotFoundError, ProxmoxError
 from app.repositories import firewall_layout as layout_repo
 from app.schemas import Message
@@ -360,7 +361,7 @@ def list_nat_rules(
     from app.repositories import resource as resource_repo  # noqa: PLC0415
 
     rules = nat_repo.list_rules(session)
-    if current_user.is_superuser:
+    if has_permission(current_user, Permission.RESOURCE_OWNERSHIP_BYPASS):
         visible_rules = rules
     else:
         own_resources = resource_repo.get_resources_by_user(
@@ -460,7 +461,7 @@ def list_reverse_proxy_rules(
     from app.repositories import resource as resource_repo  # noqa: PLC0415
 
     rules = rp_repo.list_rules(session)
-    if current_user.is_superuser:
+    if has_permission(current_user, Permission.RESOURCE_OWNERSHIP_BYPASS):
         visible_rules = rules
     else:
         own_resources = resource_repo.get_resources_by_user(

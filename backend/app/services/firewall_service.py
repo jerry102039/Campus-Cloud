@@ -14,6 +14,7 @@ import uuid
 
 from sqlmodel import Session
 
+from app.core.permissions import Permission, has_permission
 from app.core.proxmox import get_proxmox_api
 from app.exceptions import BadRequestError, NotFoundError, ProxmoxError
 from app.models.user import User
@@ -874,7 +875,7 @@ def get_topology(user: User, session: Session) -> TopologyResponse:
     - 一般使用者: 只看自己的 VM
     """
     # 取得有權限的 user_id 清單
-    if user.is_superuser:
+    if has_permission(user, Permission.RESOURCE_OWNERSHIP_BYPASS):
         all_resources = resource_repo.get_all_resources(session=session)
         target_vmids = [r.vmid for r in all_resources]
     else:

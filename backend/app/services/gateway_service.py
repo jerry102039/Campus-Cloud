@@ -7,10 +7,23 @@
 - 遠端控制 systemd 服務（start/stop/restart/reload/status）
 """
 
+from __future__ import annotations
+
 import io
 import logging
+from types import SimpleNamespace
+from typing import Any
 
-import paramiko
+try:
+    import paramiko
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    paramiko = SimpleNamespace(
+        AuthenticationException=type(
+            "MissingParamikoAuthenticationException",
+            (Exception,),
+            {},
+        )
+    )
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
@@ -21,6 +34,8 @@ from cryptography.hazmat.primitives.serialization import (
 from app.exceptions import BadRequestError, ProxmoxError
 
 logger = logging.getLogger(__name__)
+
+_PARAMIKO_AVAILABLE = not isinstance(paramiko, SimpleNamespace)
 
 # Gateway VM 上各服務的設定檔路徑
 SERVICE_CONFIG_PATHS: dict[str, str] = {
@@ -37,10 +52,18 @@ TRAEFIK_DYNAMIC_PATH = "/etc/traefik/dynamic/campus-cloud.yml"
 # ─── SSH keypair 生成 ─────────────────────────────────────────────────────────
 
 
+def _require_paramiko() -> None:
+    if not _PARAMIKO_AVAILABLE:
+        raise ProxmoxError(
+            "SSH backend is unavailable because the 'paramiko' package is not installed"
+        )
+
+
 def generate_ed25519_keypair() -> tuple[str, str]:
     """生成 ED25519 SSH keypair。
     回傳 (private_key_pem, public_key_openssh)
     """
+    _require_paramiko()
     priv = Ed25519PrivateKey.generate()
     private_key_pem = priv.private_bytes(
         Encoding.PEM, PrivateFormat.OpenSSH, NoEncryption()
@@ -61,8 +84,9 @@ def _make_client(
     ssh_port: int,
     ssh_user: str,
     private_key_pem: str,
-) -> paramiko.SSHClient:
+) -> Any:
     """建立 SSH 連線，回傳已連線的 SSHClient。"""
+    _require_paramiko()
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     pkey = paramiko.Ed25519Key.from_private_key(io.StringIO(private_key_pem))
@@ -78,7 +102,7 @@ def _make_client(
     return client
 
 
-def _exec(client: paramiko.SSHClient, command: str) -> tuple[int, str, str]:
+def _exec(client: Any, command: str) -> tuple[int, str, str]:
     """執行指令，回傳 (exit_code, stdout, stderr)。"""
     _, stdout, stderr = client.exec_command(command)
     exit_code = stdout.channel.recv_exit_status()

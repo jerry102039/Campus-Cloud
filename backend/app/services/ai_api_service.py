@@ -10,8 +10,9 @@ import httpx
 from sqlmodel import Session, select
 
 from app.ai_api.config import settings as ai_api_settings
+from app.core.permissions import Permission, require_owner_or_permission
 from app.core.security import decrypt_value, encrypt_value
-from app.exceptions import BadRequestError, NotFoundError, PermissionDeniedError
+from app.exceptions import BadRequestError, NotFoundError
 from app.models import (
     AIAPICredential,
     AIAPIRequest,
@@ -51,8 +52,12 @@ def _get_owned_credential(
     credential = session.get(AIAPICredential, credential_id)
     if not credential:
         raise NotFoundError("AI API credential not found")
-    if not current_user.is_superuser and credential.user_id != current_user.id:
-        raise PermissionDeniedError("Not enough privileges")
+    require_owner_or_permission(
+        current_user,
+        credential.user_id,
+        bypass_permission=Permission.AI_API_VIEW_ALL,
+        detail="Not enough privileges",
+    )
     return credential
 
 
@@ -158,8 +163,12 @@ def get_request(
     db_request = session.get(AIAPIRequest, request_id)
     if not db_request:
         raise NotFoundError("AI API request not found")
-    if not current_user.is_superuser and db_request.user_id != current_user.id:
-        raise PermissionDeniedError("Not enough privileges")
+    require_owner_or_permission(
+        current_user,
+        db_request.user_id,
+        bypass_permission=Permission.AI_API_VIEW_ALL,
+        detail="Not enough privileges",
+    )
     return _to_request_public(db_request)
 
 

@@ -3,6 +3,11 @@ import uuid
 
 from sqlmodel import Session
 
+from app.core.permissions import (
+    Permission,
+    has_permission,
+    require_owner_or_permission,
+)
 from app.exceptions import (
     BadRequestError,
     NotFoundError,
@@ -51,14 +56,20 @@ def _check_ownership_and_get_info(
     *, session: Session, user, vmid: int
 ) -> dict:
     """Check resource ownership and return Proxmox resource info."""
-    if not user.is_superuser:
+    if not has_permission(user, Permission.RESOURCE_OWNERSHIP_BYPASS):
         db_resource = resource_repo.get_resource_by_vmid(
             session=session, vmid=vmid
         )
-        if not db_resource or db_resource.user_id != user.id:
+        if not db_resource:
             raise PermissionDeniedError(
                 "You don't have permission to access this resource"
             )
+        require_owner_or_permission(
+            user,
+            db_resource.user_id,
+            bypass_permission=Permission.RESOURCE_OWNERSHIP_BYPASS,
+            detail="You don't have permission to access this resource",
+        )
 
     return proxmox_service.find_resource(vmid)
 

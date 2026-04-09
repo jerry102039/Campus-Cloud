@@ -4,6 +4,7 @@ from typing import Any
 from sqlmodel import Session, func, select
 
 from app.core.config import settings
+from app.core.permissions import Permission, has_permission
 from app.core.security import get_password_hash, verify_password
 from app.exceptions import (
     BadRequestError,
@@ -128,7 +129,7 @@ def get_user_by_id(
     user = session.get(User, user_id)
     if user == current_user:
         return user
-    if not current_user.is_superuser:
+    if not has_permission(current_user, Permission.USER_MANAGE):
         raise PermissionDeniedError("The user doesn't have enough privileges")
     if not user:
         raise NotFoundError("User not found")
@@ -245,7 +246,7 @@ def update_password(
 
 
 def delete_me(*, session: Session, current_user: User) -> None:
-    if current_user.is_superuser:
+    if has_permission(current_user, Permission.USER_MANAGE):
         raise PermissionDeniedError(
             "Super users are not allowed to delete themselves"
         )

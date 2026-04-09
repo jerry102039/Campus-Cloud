@@ -9,7 +9,8 @@ from sqlmodel import Session, select
 
 from app.ai.pve_advisor import recommendation_service as advisor_service
 from app.ai.pve_advisor.schemas import PlacementRequest
-from app.exceptions import BadRequestError, NotFoundError, PermissionDeniedError
+from app.core.permissions import Permission, require_owner_or_permission
+from app.exceptions import BadRequestError, NotFoundError
 from app.models import UserRole, VMRequest, VMRequestStatus
 from app.repositories import vm_request as vm_request_repo
 from app.schemas.vm_request import (
@@ -86,12 +87,12 @@ def assess_existing_request(
     if not db_request:
         raise NotFoundError("Request not found")
 
-    is_admin = bool(
-        getattr(current_user, "is_superuser", False)
-        or getattr(current_user, "role", None) == UserRole.admin
+    require_owner_or_permission(
+        current_user,
+        db_request.user_id,
+        bypass_permission=Permission.VM_REQUEST_READ_ALL,
+        detail="Not enough privileges",
     )
-    if not is_admin and db_request.user_id != current_user.id:
-        raise PermissionDeniedError("Not enough privileges")
 
     request_owner = db_request.user
     role = request_owner.role if request_owner else UserRole.student

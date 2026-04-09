@@ -12,7 +12,11 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.api.deps import AdminUser, SessionDep
 from app.core.config import settings
-from app.exceptions import PermissionDeniedError
+from app.core.permissions import (
+    Permission,
+    has_permission,
+    require_owner_or_permission,
+)
 from app.repositories import group as group_repo
 from app.repositories.user import create_user as create_user_in_db
 from app.repositories.user import get_user_by_email
@@ -35,8 +39,12 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 
 def _check_group_access(current_user, db_group) -> None:
     """確認使用者是群組擁有者或 admin，否則拋出例外"""
-    if not current_user.is_superuser and db_group.owner_id != current_user.id:
-        raise PermissionDeniedError("Not authorized to access this group")
+    require_owner_or_permission(
+        current_user,
+        db_group.owner_id,
+        bypass_permission=Permission.GROUP_OWNERSHIP_BYPASS,
+        detail="Not authorized to access this group",
+    )
 
 
 @router.post("/", response_model=GroupPublic)
@@ -70,7 +78,7 @@ def create_group(
 
 @router.get("/", response_model=GroupsPublic)
 def list_groups(session: SessionDep, current_user: AdminUser):
-    if current_user.is_superuser:
+    if has_permission(current_user, Permission.GROUP_OWNERSHIP_BYPASS):
         groups = group_repo.get_all_groups(session=session)
     else:
         groups = group_repo.get_groups_by_owner(

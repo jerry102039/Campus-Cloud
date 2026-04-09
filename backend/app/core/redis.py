@@ -6,8 +6,13 @@ Redis 連接管理模組
 """
 
 import logging
+from typing import Any
 
-from redis.asyncio import ConnectionPool, Redis
+try:
+    from redis.asyncio import ConnectionPool, Redis
+except ModuleNotFoundError:  # pragma: no cover - depends on local env
+    ConnectionPool = Any  # type: ignore[assignment]
+    Redis = Any  # type: ignore[assignment]
 
 from app.ai_api.config import settings
 
@@ -16,7 +21,8 @@ logger = logging.getLogger(__name__)
 # 全局連接池和客戶端
 _redis_pool: ConnectionPool | None = None
 _redis_client: Redis | None = None
-_redis_enabled: bool = settings.redis_enabled
+_redis_backend_available = ConnectionPool is not Any
+_redis_enabled: bool = settings.redis_enabled and _redis_backend_available
 
 
 async def init_redis() -> None:
@@ -27,6 +33,12 @@ async def init_redis() -> None:
     如果 REDIS_ENABLED=false，則跳過初始化（不會報錯）
     """
     global _redis_pool, _redis_client
+
+    if not _redis_backend_available:
+        logger.warning(
+            "Redis Python package is not installed. Rate limiting functionality will be skipped."
+        )
+        return
 
     if not _redis_enabled:
         logger.info(

@@ -4,14 +4,20 @@ from datetime import UTC, datetime, timedelta
 
 from sqlmodel import Session
 
+from app.core.permissions import (
+    Permission,
+    is_admin,
+    is_teacher,
+    require_owner_or_permission,
+    require_permission,
+)
 from app.core.security import encrypt_value
 from app.exceptions import (
     BadRequestError,
     NotFoundError,
-    PermissionDeniedError,
     ProvisioningError,
 )
-from app.models import UserRole, VMMigrationStatus, VMRequest, VMRequestStatus
+from app.models import VMMigrationStatus, VMRequest, VMRequestStatus
 from app.schemas import (
     VMRequestCreate,
     VMRequestPublic,
@@ -186,21 +192,15 @@ def create(
     ):
         raise BadRequestError("VM request requires template_id and username")
 
-    user_role = getattr(user, "role", None)
-    is_admin = bool(
-        getattr(user, "is_superuser", False)
-        or user_role == UserRole.admin
-    )
-    is_teacher = user_role == UserRole.teacher
-
     # ---------- mode validation ----------
     mode = getattr(request_in, "mode", "scheduled") or "scheduled"
 
     if mode == "immediate":
-        if not (is_admin or is_teacher):
-            raise PermissionDeniedError(
-                "Only admins and teachers can use immediate mode"
-            )
+        require_permission(
+            user,
+            Permission.VM_REQUEST_USE_IMMEDIATE_MODE,
+            detail="Only admins and teachers can use immediate mode",
+        )
         # Set start_at to now; end_at can be None (infinite) or user-specified.
         request_in.start_at = _utc_now()
         if request_in.end_at is not None:
@@ -244,7 +244,7 @@ def create(
 
     # ---------- role branching ----------
     auto_approved = False
-    if is_admin:
+    if is_admin(user):
         # Admin/superuser: auto-approve always (both immediate and scheduled)
         _approve_and_place(
             session=session,
@@ -252,7 +252,7 @@ def create(
             reviewer_id=user.id,
         )
         auto_approved = True
-    elif is_teacher and mode == "immediate":
+    elif is_teacher(user) and mode == "immediate":
         # Teacher + immediate: auto-approve
         _approve_and_place(
             session=session,
@@ -325,8 +325,12 @@ def get(
     )
     if not db_request:
         raise NotFoundError("Request not found")
-    if not current_user.is_superuser and db_request.user_id != current_user.id:
-        raise PermissionDeniedError("Not enough privileges")
+    require_owner_or_permission(
+        current_user,
+        db_request.user_id,
+        bypass_permission=Permission.VM_REQUEST_READ_ALL,
+        detail="Not enough privileges",
+    )
     return _to_public(db_request)
 
 
@@ -343,12 +347,11 @@ def get_review_context(
     if not db_request:
         raise NotFoundError("Request not found")
 
-    is_admin = bool(
-        getattr(current_user, "is_superuser", False)
-        or getattr(current_user, "role", None) == UserRole.admin
+    require_permission(
+        current_user,
+        Permission.VM_REQUEST_REVIEW,
+        detail="Not enough privileges",
     )
-    if not is_admin:
-        raise PermissionDeniedError("Not enough privileges")
 
     start_at = db_request.start_at
     end_at = db_request.end_at

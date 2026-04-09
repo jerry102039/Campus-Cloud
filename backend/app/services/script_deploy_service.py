@@ -4,21 +4,37 @@
 部署完成後自動刪除腳本；失敗時完全回滾（銷毀已建立的容器）。
 """
 
+from __future__ import annotations
+
 import io
 import logging
 import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from types import SimpleNamespace
+from typing import Any
 
-import paramiko
+try:
+    import paramiko
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    paramiko = SimpleNamespace(
+        AuthenticationException=type(
+            "MissingParamikoAuthenticationException",
+            (Exception,),
+            {},
+        )
+    )
 from sqlmodel import Session
 
 from app.core.proxmox import get_active_host, get_proxmox_api, get_proxmox_settings
+from app.exceptions import ProxmoxError
 from app.models.proxmox_config import ProxmoxConfig
 from app.services import firewall_service, proxmox_service
 
 logger = logging.getLogger(__name__)
+
+_PARAMIKO_AVAILABLE = not isinstance(paramiko, SimpleNamespace)
 
 GITHUB_RAW_BASE = (
     "https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main"
@@ -76,8 +92,16 @@ def get_task(task_id: str) -> DeploymentTask | None:
 # ---------------------------------------------------------------------------
 
 
-def _ssh_connect() -> paramiko.SSHClient:
+def _require_paramiko() -> None:
+    if not _PARAMIKO_AVAILABLE:
+        raise ProxmoxError(
+            "SSH backend is unavailable because the 'paramiko' package is not installed"
+        )
+
+
+def _ssh_connect() -> Any:
     """建立到 Proxmox 節點的 SSH 連線。"""
+    _require_paramiko()
     cfg = get_proxmox_settings()
     host = get_active_host()
     # Proxmox user 格式如 root@pam，SSH 只需要 username 部分
@@ -98,7 +122,7 @@ def _ssh_connect() -> paramiko.SSHClient:
 
 
 def _ssh_exec(
-    client: paramiko.SSHClient, command: str, timeout: int = 600
+    client: Any, command: str, timeout: int = 600
 ) -> tuple[int, str, str]:
     """執行 SSH 命令，回傳 (exit_code, stdout, stderr)。"""
     _, stdout_ch, stderr_ch = client.exec_command(command, timeout=timeout)
@@ -109,7 +133,7 @@ def _ssh_exec(
 
 
 def _ssh_exec_streaming(
-    client: paramiko.SSHClient,
+    client: Any,
     command: str,
     task: "DeploymentTask",
     timeout: int = 900,
@@ -269,7 +293,7 @@ def _destroy_container(vmid: int) -> None:
         logger.exception("清除容器 VMID=%s 失敗", vmid)
 
 
-def _cleanup_script_on_node(client: paramiko.SSHClient, script_path: str) -> None:
+def _cleanup_script_on_node(client: Any, script_path: str) -> None:
     """刪除 Proxmox 節點上的暫存腳本。"""
     try:
         _ssh_exec(client, f"rm -f {script_path}")

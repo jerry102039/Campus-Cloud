@@ -6,7 +6,9 @@ import time
 from datetime import datetime
 
 import pytest
-from redis.asyncio import Redis
+
+redis_asyncio = pytest.importorskip("redis.asyncio")
+Redis = redis_asyncio.Redis
 
 from app.services.redis_rate_limiter import (
     check_rate_limit_sliding_window,
