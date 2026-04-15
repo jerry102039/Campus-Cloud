@@ -30,7 +30,7 @@ async def _snapshot_or_500() -> SystemSnapshot:
         return await asyncio.to_thread(collect_snapshot)
     except Exception as exc:
         logger.exception("收集 PVE 系統快照失敗")
-        raise HTTPException(status_code=500, detail=f"收集 PVE 資料失敗：{exc}")
+        raise HTTPException(status_code=500, detail="收集 PVE 資料失敗，請稍後再試")
 
 
 @router.get("/system-snapshot", response_model=SystemSnapshot)
