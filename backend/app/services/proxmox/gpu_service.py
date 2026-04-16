@@ -55,8 +55,14 @@ def _extract_gpu_info(description: str, mapping_id: str) -> tuple[str, str, int]
         amount = int(vram_match.group(1))
         unit = vram_match.group(2).upper()
         if unit in ("MB", "MIB"):
-            vram = f"{amount // 1024} GB"
             vram_mb = amount
+            if amount < 1024:
+                vram = f"{amount} MB"
+            elif amount % 1024 == 0:
+                vram = f"{amount // 1024} GB"
+            else:
+                gb_amount = amount / 1024
+                vram = f"{gb_amount:.2f}".rstrip("0").rstrip(".") + " GB"
         else:
             vram = f"{amount} GB"
             vram_mb = amount * 1024
