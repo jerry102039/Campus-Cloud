@@ -276,6 +276,13 @@ def delete(
         except Exception as exc:
             logger.warning("Failed to clean up reverse proxy rules for VM %s: %s", vmid, exc)
 
+        # Release IP allocation
+        try:
+            from app.services.network import ip_management_service  # noqa: PLC0415
+            ip_management_service.release_ip(session, vmid)
+        except Exception as exc:
+            logger.warning("Failed to release IP for VM %s: %s", vmid, exc)
+
         # Remove from database (resource record + all associated audit logs)
         resource_repo.delete_resource(session=session, vmid=vmid)
         audit_log_repo.delete_audit_logs_by_vmid(session=session, vmid=vmid)

@@ -40,6 +40,8 @@ from .batch_provision import (
     BatchProvisionTaskStatus,
 )
 from .tunnel_proxy import TunnelProxy
+from .subnet_config import SubnetConfig
+from .ip_allocation import IpAllocation
 
 __all__ = [
     # Base
@@ -97,4 +99,7 @@ __all__ = [
     "BatchProvisionTaskStatus",
     # Tunnel Proxies
     "TunnelProxy",
+    # Subnet & IP Management
+    "SubnetConfig",
+    "IpAllocation",
 ]

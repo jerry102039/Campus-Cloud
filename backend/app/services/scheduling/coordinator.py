@@ -24,6 +24,7 @@ from app.repositories import resource as resource_repo
 from app.repositories import vm_migration_job as vm_migration_job_repo
 from app.repositories import vm_request as vm_request_repo
 from app.services.proxmox import provisioning_service, proxmox_service
+from app.services.network import ip_management_service
 from app.services.scheduling import policy as scheduling_policy
 from app.services.scheduling import support as scheduling_support
 from app.services.user import audit_service
@@ -191,9 +192,16 @@ def _provision_new_resource(
         )
     except Exception:
         # Plan failed — revert to approved so scheduler can retry.
-        request.status = VMRequestStatus.approved
-        session.add(request)
-        session.commit()
+        # IP allocated during plan_provision is already flushed to session;
+        # rollback first, then revert status cleanly.
+        session.rollback()
+        request = vm_request_repo.get_vm_request_by_id(
+            session=session, request_id=request.id, for_update=True,
+        )
+        if request:
+            request.status = VMRequestStatus.approved
+            session.add(request)
+            session.commit()
         raise
 
     request_id = request.id
@@ -212,8 +220,15 @@ def _provision_new_resource(
     try:
         new_vmid, actual_node = provisioning_service.execute_provision(plan)
     except Exception:
-        # Clone failed — revert to approved.
+        # Clone failed — revert to approved and release allocated IP.
         with Session(engine) as rollback_session:
+            # Release IP allocated during planning
+            try:
+                ip_management_service.release_ip(rollback_session, plan["vmid"])
+                rollback_session.commit()
+            except Exception:
+                logger.warning("Failed to release IP for VMID %s during rollback", plan["vmid"])
+
             req = vm_request_repo.get_vm_request_by_id(
                 session=rollback_session, request_id=request_id, for_update=True,
             )

@@ -19,6 +19,7 @@ import {
   Shield,
   Users,
   UsersRound,
+  Wifi,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -89,6 +90,7 @@ export function AppSidebar() {
     },
     { icon: Cloud, title: "網域管理", path: "/admin/domains" },
     { icon: Network, title: "Gateway VM", path: "/admin/gateway" },
+    { icon: Wifi, title: "IP 管理", path: "/admin/ip-management" },
     { icon: ScrollText, title: "Audit Logs", path: "/admin/audit-logs" },
   ]
 

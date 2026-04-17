@@ -10,6 +10,7 @@ from app.infrastructure.proxmox import get_proxmox_settings
 from app.infrastructure.ssh.client import generate_ed25519_keypair
 from app.core.security import decrypt_value, encrypt_value
 from app.exceptions import ProxmoxError
+from app.services.network import ip_management_service
 from app.schemas import (
     LXCCreateRequest,
     LXCCreateResponse,
@@ -241,11 +242,20 @@ def create_lxc(
         disk_gb=int(lxc_data.rootfs_size or 8),
         required_content="rootdir",
     )
+    # 取得網路配置並分配 IP
+    net_cfg = ip_management_service.get_network_config_for_vm(session)
+    allocated_ip = ip_management_service.allocate_ip(session, vmid, "lxc")
+
     created = False
     try:
         # Generate SSH key pair for platform access
         private_key_pem, public_key = generate_ed25519_keypair()
 
+        net0_parts = (
+            f"name=eth0,bridge={net_cfg['bridge_name']},"
+            f"ip={allocated_ip}/{net_cfg['prefix_len']},"
+            f"gw={net_cfg['gateway']},firewall=1"
+        )
         config = {
             "vmid": vmid,
             "hostname": to_punycode_hostname(lxc_data.hostname),
@@ -255,13 +265,15 @@ def create_lxc(
             "swap": 512,
             "rootfs": f"{target_storage}:{lxc_data.rootfs_size}",
             "password": lxc_data.password,
-            "net0": "name=eth0,bridge=vmbr0,ip=dhcp,firewall=1",
+            "net0": net0_parts,
             "unprivileged": int(lxc_data.unprivileged),
             "start": int(lxc_data.start),
             "pool": get_proxmox_settings().pool_name,
             "features": "nesting=1",
             "ssh-public-keys": public_key,
         }
+        if net_cfg.get("dns_servers"):
+            config["nameserver"] = net_cfg["dns_servers"]
 
         result = proxmox_service.create_lxc(target_node, **config)
         created = True
@@ -313,6 +325,13 @@ def create_lxc(
         )
     except Exception as e:
         session.rollback()
+        # 釋放已分配的 IP
+        try:
+            with Session(session.get_bind()) as cleanup_session:
+                ip_management_service.release_ip(cleanup_session, vmid)
+                cleanup_session.commit()
+        except Exception:
+            logger.warning("Failed to release IP for LXC %d during cleanup", vmid)
         if created:
             _cleanup_failed_resource(target_node, vmid, "lxc")
         logger.error(f"Failed to create LXC container: {e}")
@@ -332,6 +351,11 @@ def create_vm(
         disk_gb=int(vm_data.disk_size or 20),
         required_content="images",
     )
+
+    # 取得網路配置並分配 IP
+    net_cfg = ip_management_service.get_network_config_for_vm(session)
+    allocated_ip = ip_management_service.allocate_ip(session, new_vmid, "vm")
+
     created = False
     try:
         # Generate SSH key pair for platform access
@@ -355,7 +379,11 @@ def create_vm(
             "cipassword": vm_data.password,
             "sshkeys": quote(public_key, safe=""),
             "ciupgrade": 0,
+            "net0": f"virtio,bridge={net_cfg['bridge_name']},firewall=1",
+            "ipconfig0": f"ip={allocated_ip}/{net_cfg['prefix_len']},gw={net_cfg['gateway']}",
         }
+        if net_cfg.get("dns_servers"):
+            config_updates["nameserver"] = net_cfg["dns_servers"]
         if vm_data.gpu_mapping_id:
             config_updates["hostpci0"] = f"mapping={vm_data.gpu_mapping_id}"
         proxmox_service.update_config(target_node, new_vmid, "qemu", **config_updates)
@@ -416,6 +444,13 @@ def create_vm(
         )
     except Exception as e:
         session.rollback()
+        # 釋放已分配的 IP
+        try:
+            with Session(session.get_bind()) as cleanup_session:
+                ip_management_service.release_ip(cleanup_session, new_vmid)
+                cleanup_session.commit()
+        except Exception:
+            logger.warning("Failed to release IP for VM %d during cleanup", new_vmid)
         if created:
             _cleanup_failed_resource(target_node, new_vmid, "qemu")
         logger.error(f"Failed to create VM: {e}")
@@ -450,6 +485,11 @@ def plan_provision(*, session: Session, db_request) -> dict:
     # Generate SSH key pair for platform access
     private_key_pem, public_key = generate_ed25519_keypair()
 
+    # 取得網路配置並分配 IP（需在 session 中完成）
+    net_cfg = ip_management_service.get_network_config_for_vm(session)
+    purpose = "lxc" if db_request.resource_type == "lxc" else "vm"
+    allocated_ip = ip_management_service.allocate_ip(session, new_vmid, purpose)
+
     plan: dict = {
         "vmid": new_vmid,
         "target_node": target_node,
@@ -467,6 +507,8 @@ def plan_provision(*, session: Session, db_request) -> dict:
         "storage": db_request.storage,
         "ssh_private_key_encrypted": encrypt_value(private_key_pem),
         "ssh_public_key": public_key,
+        "allocated_ip": allocated_ip,
+        "net_cfg": net_cfg,
     }
 
     if db_request.resource_type == "lxc":
@@ -524,9 +566,17 @@ def execute_provision(plan: dict) -> tuple[int, str]:
     pool_name = get_proxmox_settings().pool_name
     created = False
     actual_node = target_node
+    net_cfg = plan.get("net_cfg", {})
+    allocated_ip = plan.get("allocated_ip")
 
     try:
         if resource_type == "lxc":
+            net0_parts = (
+                f"name=eth0,bridge={net_cfg.get('bridge_name', 'vmbr0')},"
+                f"ip={allocated_ip}/{net_cfg.get('prefix_len', 24)},"
+                f"gw={net_cfg.get('gateway', '')},firewall=1"
+            ) if allocated_ip else "name=eth0,bridge=vmbr0,ip=dhcp,firewall=1"
+
             config = {
                 "vmid": new_vmid,
                 "hostname": plan["hostname"],
@@ -536,13 +586,15 @@ def execute_provision(plan: dict) -> tuple[int, str]:
                 "swap": 512,
                 "rootfs": f"{plan['target_storage']}:{plan['rootfs_size']}",
                 "password": plan["password"],
-                "net0": "name=eth0,bridge=vmbr0,ip=dhcp,firewall=1",
+                "net0": net0_parts,
                 "unprivileged": int(plan["unprivileged"]),
                 "start": int(plan["start_immediately"]),
                 "pool": pool_name,
                 "features": "nesting=1",
                 "ssh-public-keys": plan.get("ssh_public_key", ""),
             }
+            if net_cfg.get("dns_servers"):
+                config["nameserver"] = net_cfg["dns_servers"]
             proxmox_service.create_lxc(target_node, **config)
             created = True
             firewall_service.setup_default_rules(target_node, new_vmid, "lxc")
@@ -593,6 +645,11 @@ def execute_provision(plan: dict) -> tuple[int, str]:
                 "sshkeys": quote(plan.get("ssh_public_key", ""), safe=""),
                 "ciupgrade": 0,
             }
+            if allocated_ip and net_cfg:
+                config_updates["net0"] = f"virtio,bridge={net_cfg.get('bridge_name', 'vmbr0')},firewall=1"
+                config_updates["ipconfig0"] = f"ip={allocated_ip}/{net_cfg.get('prefix_len', 24)},gw={net_cfg.get('gateway', '')}"
+                if net_cfg.get("dns_servers"):
+                    config_updates["nameserver"] = net_cfg["dns_servers"]
             if plan.get("gpu_mapping_id"):
                 config_updates["hostpci0"] = f"mapping={plan['gpu_mapping_id']}"
             proxmox_service.update_config(actual_node, new_vmid, "qemu", **config_updates)

@@ -36,6 +36,7 @@ import { Route as LayoutMyResourcesVmidRouteImport } from './routes/_layout/my-r
 import { Route as LayoutGroupsGroupIdRouteImport } from './routes/_layout/groups_.$groupId'
 import { Route as LayoutApprovalsRequestIdRouteImport } from './routes/_layout/approvals_.$requestId'
 import { Route as LayoutAdminMigrationJobsRouteImport } from './routes/_layout/admin.migration-jobs'
+import { Route as LayoutAdminIpManagementRouteImport } from './routes/_layout/admin.ip-management'
 import { Route as LayoutAdminGatewayRouteImport } from './routes/_layout/admin.gateway'
 import { Route as LayoutAdminDomainsRouteImport } from './routes/_layout/admin.domains'
 import { Route as LayoutAdminConfigurationRouteImport } from './routes/_layout/admin.configuration'
@@ -181,6 +182,11 @@ const LayoutAdminMigrationJobsRoute =
     path: '/migration-jobs',
     getParentRoute: () => LayoutAdminRoute,
   } as any)
+const LayoutAdminIpManagementRoute = LayoutAdminIpManagementRouteImport.update({
+  id: '/ip-management',
+  path: '/ip-management',
+  getParentRoute: () => LayoutAdminRoute,
+} as any)
 const LayoutAdminGatewayRoute = LayoutAdminGatewayRouteImport.update({
   id: '/gateway',
   path: '/gateway',
@@ -246,6 +252,7 @@ export interface FileRoutesByFullPath {
   '/admin/configuration': typeof LayoutAdminConfigurationRoute
   '/admin/domains': typeof LayoutAdminDomainsRoute
   '/admin/gateway': typeof LayoutAdminGatewayRoute
+  '/admin/ip-management': typeof LayoutAdminIpManagementRoute
   '/admin/migration-jobs': typeof LayoutAdminMigrationJobsRoute
   '/approvals/$requestId': typeof LayoutApprovalsRequestIdRoute
   '/groups/$groupId': typeof LayoutGroupsGroupIdRoute
@@ -280,6 +287,7 @@ export interface FileRoutesByTo {
   '/admin/configuration': typeof LayoutAdminConfigurationRoute
   '/admin/domains': typeof LayoutAdminDomainsRoute
   '/admin/gateway': typeof LayoutAdminGatewayRoute
+  '/admin/ip-management': typeof LayoutAdminIpManagementRoute
   '/admin/migration-jobs': typeof LayoutAdminMigrationJobsRoute
   '/approvals/$requestId': typeof LayoutApprovalsRequestIdRoute
   '/groups/$groupId': typeof LayoutGroupsGroupIdRoute
@@ -317,6 +325,7 @@ export interface FileRoutesById {
   '/_layout/admin/configuration': typeof LayoutAdminConfigurationRoute
   '/_layout/admin/domains': typeof LayoutAdminDomainsRoute
   '/_layout/admin/gateway': typeof LayoutAdminGatewayRoute
+  '/_layout/admin/ip-management': typeof LayoutAdminIpManagementRoute
   '/_layout/admin/migration-jobs': typeof LayoutAdminMigrationJobsRoute
   '/_layout/approvals_/$requestId': typeof LayoutApprovalsRequestIdRoute
   '/_layout/groups_/$groupId': typeof LayoutGroupsGroupIdRoute
@@ -354,6 +363,7 @@ export interface FileRouteTypes {
     | '/admin/configuration'
     | '/admin/domains'
     | '/admin/gateway'
+    | '/admin/ip-management'
     | '/admin/migration-jobs'
     | '/approvals/$requestId'
     | '/groups/$groupId'
@@ -388,6 +398,7 @@ export interface FileRouteTypes {
     | '/admin/configuration'
     | '/admin/domains'
     | '/admin/gateway'
+    | '/admin/ip-management'
     | '/admin/migration-jobs'
     | '/approvals/$requestId'
     | '/groups/$groupId'
@@ -424,6 +435,7 @@ export interface FileRouteTypes {
     | '/_layout/admin/configuration'
     | '/_layout/admin/domains'
     | '/_layout/admin/gateway'
+    | '/_layout/admin/ip-management'
     | '/_layout/admin/migration-jobs'
     | '/_layout/approvals_/$requestId'
     | '/_layout/groups_/$groupId'
@@ -633,6 +645,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminMigrationJobsRouteImport
       parentRoute: typeof LayoutAdminRoute
     }
+    '/_layout/admin/ip-management': {
+      id: '/_layout/admin/ip-management'
+      path: '/ip-management'
+      fullPath: '/admin/ip-management'
+      preLoaderRoute: typeof LayoutAdminIpManagementRouteImport
+      parentRoute: typeof LayoutAdminRoute
+    }
     '/_layout/admin/gateway': {
       id: '/_layout/admin/gateway'
       path: '/gateway'
@@ -691,6 +710,7 @@ interface LayoutAdminRouteChildren {
   LayoutAdminConfigurationRoute: typeof LayoutAdminConfigurationRoute
   LayoutAdminDomainsRoute: typeof LayoutAdminDomainsRoute
   LayoutAdminGatewayRoute: typeof LayoutAdminGatewayRoute
+  LayoutAdminIpManagementRoute: typeof LayoutAdminIpManagementRoute
   LayoutAdminMigrationJobsRoute: typeof LayoutAdminMigrationJobsRoute
   LayoutAdminIndexRoute: typeof LayoutAdminIndexRoute
 }
@@ -701,6 +721,7 @@ const LayoutAdminRouteChildren: LayoutAdminRouteChildren = {
   LayoutAdminConfigurationRoute: LayoutAdminConfigurationRoute,
   LayoutAdminDomainsRoute: LayoutAdminDomainsRoute,
   LayoutAdminGatewayRoute: LayoutAdminGatewayRoute,
+  LayoutAdminIpManagementRoute: LayoutAdminIpManagementRoute,
   LayoutAdminMigrationJobsRoute: LayoutAdminMigrationJobsRoute,
   LayoutAdminIndexRoute: LayoutAdminIndexRoute,
 }

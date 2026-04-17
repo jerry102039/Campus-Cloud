@@ -40,6 +40,7 @@ _CC_PREFIX = "campus-cloud:"
 _GATEWAY_COMMENT = f"{_CC_PREFIX}gateway:default"
 _BLOCK_LOCAL_COMMENT = f"{_CC_PREFIX}block-local-subnet"
 _INTERNET_INBOUND_PREFIX = f"{_CC_PREFIX}gateway->"
+_GATEWAY_FULL_ACCESS_COMMENT = f"{_CC_PREFIX}gateway:full-access"
 
 
 def _from_punycode_hostname(hostname: str) -> str:
@@ -180,6 +181,33 @@ def setup_default_rules(node: str, vmid: int, resource_type: ResourceType) -> No
         }
         _firewall_api(node, vmid, resource_type).rules.post(**gateway_rule)
         logger.info(f"VM {vmid}: 已新增預設出站規則（往網關）")
+
+        # 新增 Gateway VM → VM 全埠 ACCEPT 規則（1-65535 TCP+UDP）
+        try:
+            from app.services.network import ip_management_service  # noqa: PLC0415
+            from sqlmodel import Session  # noqa: PLC0415
+            from app.core.db import engine  # noqa: PLC0415
+
+            with Session(engine) as s:
+                subnet_config = ip_management_service.get_subnet_config(s)
+            if subnet_config and subnet_config.gateway_vm_ip:
+                gw_ip = subnet_config.gateway_vm_ip
+                for proto in ("tcp", "udp"):
+                    gw_access_rule = {
+                        "type": "in",
+                        "action": "ACCEPT",
+                        "source": gw_ip,
+                        "dport": "1:65535",
+                        "proto": proto,
+                        "enable": 1,
+                        "comment": _GATEWAY_FULL_ACCESS_COMMENT,
+                    }
+                    _firewall_api(node, vmid, resource_type).rules.post(**gw_access_rule)
+                logger.info(
+                    f"VM {vmid}: 已新增 Gateway VM ({gw_ip}) → VM 全埠 ACCEPT 規則"
+                )
+        except Exception as gw_err:
+            logger.warning(f"VM {vmid}: 新增 Gateway 全埠規則失敗（非致命）: {gw_err}")
 
     except Exception as e:
         logger.error(f"VM {vmid}: 設定防火牆預設規則失敗: {e}")
