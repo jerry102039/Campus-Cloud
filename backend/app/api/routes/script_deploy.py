@@ -3,15 +3,22 @@
 提供服務模板的無人值守部署功能：
 - POST /deploy: 啟動部署任務（背景執行）
 - GET /status/{task_id}: 查詢部署進度
+- GET /logs: 列出歷史部署日誌
+- GET /logs/{task_id}: 查詢單筆部署日誌詳細內容（含完整 output）
 """
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from sqlmodel import func, select
 
 from app.api.deps import AdminUser, SessionDep
+from app.models.script_deploy_log import ScriptDeployLog
 from app.repositories import resource as resource_repo
 from app.schemas.script_deploy import (
+    ScriptDeployLogDetail,
+    ScriptDeployLogList,
+    ScriptDeployLogListItem,
     ScriptDeployRequest,
     ScriptDeployResponse,
     ScriptDeployStatus,
@@ -116,3 +123,50 @@ def register_deployed_resource(
         session.rollback()
         logger.error("註冊部署資源失敗: %s", e)
         raise HTTPException(status_code=500, detail=f"註冊資源失敗: {e}")
+
+
+@router.get("/logs", response_model=ScriptDeployLogList)
+def list_deploy_logs(
+    session: SessionDep,
+    current_user: AdminUser,  # noqa: ARG001 — required for AdminUser auth
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    status: str | None = Query(None, description="running | completed | failed"),
+    template_slug: str | None = None,
+    vmid: int | None = None,
+) -> ScriptDeployLogList:
+    """列出歷史部署日誌（Admin 可見全部）。"""
+    stmt = select(ScriptDeployLog)
+    count_stmt = select(func.count()).select_from(ScriptDeployLog)
+
+    if status:
+        stmt = stmt.where(ScriptDeployLog.status == status)
+        count_stmt = count_stmt.where(ScriptDeployLog.status == status)
+    if template_slug:
+        stmt = stmt.where(ScriptDeployLog.template_slug == template_slug)
+        count_stmt = count_stmt.where(ScriptDeployLog.template_slug == template_slug)
+    if vmid is not None:
+        stmt = stmt.where(ScriptDeployLog.vmid == vmid)
+        count_stmt = count_stmt.where(ScriptDeployLog.vmid == vmid)
+
+    total = session.exec(count_stmt).one()
+    stmt = stmt.order_by(ScriptDeployLog.created_at.desc()).offset(offset).limit(limit)
+    rows = session.exec(stmt).all()
+
+    items = [ScriptDeployLogListItem.model_validate(r, from_attributes=True) for r in rows]
+    return ScriptDeployLogList(items=items, total=int(total), limit=limit, offset=offset)
+
+
+@router.get("/logs/{task_id}", response_model=ScriptDeployLogDetail)
+def get_deploy_log(
+    task_id: str,
+    session: SessionDep,
+    current_user: AdminUser,  # noqa: ARG001 — required for AdminUser auth
+) -> ScriptDeployLogDetail:
+    """查詢單筆部署日誌詳細內容（含完整 output 與 error）。"""
+    row = session.exec(
+        select(ScriptDeployLog).where(ScriptDeployLog.task_id == task_id)
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="找不到該部署日誌")
+    return ScriptDeployLogDetail.model_validate(row, from_attributes=True)

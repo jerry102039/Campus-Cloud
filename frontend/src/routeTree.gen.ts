@@ -39,6 +39,7 @@ import { Route as LayoutAdminMigrationJobsRouteImport } from './routes/_layout/a
 import { Route as LayoutAdminIpManagementRouteImport } from './routes/_layout/admin.ip-management'
 import { Route as LayoutAdminGatewayRouteImport } from './routes/_layout/admin.gateway'
 import { Route as LayoutAdminDomainsRouteImport } from './routes/_layout/admin.domains'
+import { Route as LayoutAdminDeployLogsRouteImport } from './routes/_layout/admin.deploy-logs'
 import { Route as LayoutAdminConfigurationRouteImport } from './routes/_layout/admin.configuration'
 import { Route as LayoutAdminAuditLogsRouteImport } from './routes/_layout/admin.audit-logs'
 import { Route as LayoutAdminAiMonitoringRouteImport } from './routes/_layout/admin.ai-monitoring'
@@ -197,6 +198,11 @@ const LayoutAdminDomainsRoute = LayoutAdminDomainsRouteImport.update({
   path: '/domains',
   getParentRoute: () => LayoutAdminRoute,
 } as any)
+const LayoutAdminDeployLogsRoute = LayoutAdminDeployLogsRouteImport.update({
+  id: '/deploy-logs',
+  path: '/deploy-logs',
+  getParentRoute: () => LayoutAdminRoute,
+} as any)
 const LayoutAdminConfigurationRoute =
   LayoutAdminConfigurationRouteImport.update({
     id: '/configuration',
@@ -250,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/admin/ai-monitoring': typeof LayoutAdminAiMonitoringRoute
   '/admin/audit-logs': typeof LayoutAdminAuditLogsRoute
   '/admin/configuration': typeof LayoutAdminConfigurationRoute
+  '/admin/deploy-logs': typeof LayoutAdminDeployLogsRoute
   '/admin/domains': typeof LayoutAdminDomainsRoute
   '/admin/gateway': typeof LayoutAdminGatewayRoute
   '/admin/ip-management': typeof LayoutAdminIpManagementRoute
@@ -285,6 +292,7 @@ export interface FileRoutesByTo {
   '/admin/ai-monitoring': typeof LayoutAdminAiMonitoringRoute
   '/admin/audit-logs': typeof LayoutAdminAuditLogsRoute
   '/admin/configuration': typeof LayoutAdminConfigurationRoute
+  '/admin/deploy-logs': typeof LayoutAdminDeployLogsRoute
   '/admin/domains': typeof LayoutAdminDomainsRoute
   '/admin/gateway': typeof LayoutAdminGatewayRoute
   '/admin/ip-management': typeof LayoutAdminIpManagementRoute
@@ -323,6 +331,7 @@ export interface FileRoutesById {
   '/_layout/admin/ai-monitoring': typeof LayoutAdminAiMonitoringRoute
   '/_layout/admin/audit-logs': typeof LayoutAdminAuditLogsRoute
   '/_layout/admin/configuration': typeof LayoutAdminConfigurationRoute
+  '/_layout/admin/deploy-logs': typeof LayoutAdminDeployLogsRoute
   '/_layout/admin/domains': typeof LayoutAdminDomainsRoute
   '/_layout/admin/gateway': typeof LayoutAdminGatewayRoute
   '/_layout/admin/ip-management': typeof LayoutAdminIpManagementRoute
@@ -361,6 +370,7 @@ export interface FileRouteTypes {
     | '/admin/ai-monitoring'
     | '/admin/audit-logs'
     | '/admin/configuration'
+    | '/admin/deploy-logs'
     | '/admin/domains'
     | '/admin/gateway'
     | '/admin/ip-management'
@@ -396,6 +406,7 @@ export interface FileRouteTypes {
     | '/admin/ai-monitoring'
     | '/admin/audit-logs'
     | '/admin/configuration'
+    | '/admin/deploy-logs'
     | '/admin/domains'
     | '/admin/gateway'
     | '/admin/ip-management'
@@ -433,6 +444,7 @@ export interface FileRouteTypes {
     | '/_layout/admin/ai-monitoring'
     | '/_layout/admin/audit-logs'
     | '/_layout/admin/configuration'
+    | '/_layout/admin/deploy-logs'
     | '/_layout/admin/domains'
     | '/_layout/admin/gateway'
     | '/_layout/admin/ip-management'
@@ -666,6 +678,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminDomainsRouteImport
       parentRoute: typeof LayoutAdminRoute
     }
+    '/_layout/admin/deploy-logs': {
+      id: '/_layout/admin/deploy-logs'
+      path: '/deploy-logs'
+      fullPath: '/admin/deploy-logs'
+      preLoaderRoute: typeof LayoutAdminDeployLogsRouteImport
+      parentRoute: typeof LayoutAdminRoute
+    }
     '/_layout/admin/configuration': {
       id: '/_layout/admin/configuration'
       path: '/configuration'
@@ -708,6 +727,7 @@ interface LayoutAdminRouteChildren {
   LayoutAdminAiMonitoringRoute: typeof LayoutAdminAiMonitoringRoute
   LayoutAdminAuditLogsRoute: typeof LayoutAdminAuditLogsRoute
   LayoutAdminConfigurationRoute: typeof LayoutAdminConfigurationRoute
+  LayoutAdminDeployLogsRoute: typeof LayoutAdminDeployLogsRoute
   LayoutAdminDomainsRoute: typeof LayoutAdminDomainsRoute
   LayoutAdminGatewayRoute: typeof LayoutAdminGatewayRoute
   LayoutAdminIpManagementRoute: typeof LayoutAdminIpManagementRoute
@@ -719,6 +739,7 @@ const LayoutAdminRouteChildren: LayoutAdminRouteChildren = {
   LayoutAdminAiMonitoringRoute: LayoutAdminAiMonitoringRoute,
   LayoutAdminAuditLogsRoute: LayoutAdminAuditLogsRoute,
   LayoutAdminConfigurationRoute: LayoutAdminConfigurationRoute,
+  LayoutAdminDeployLogsRoute: LayoutAdminDeployLogsRoute,
   LayoutAdminDomainsRoute: LayoutAdminDomainsRoute,
   LayoutAdminGatewayRoute: LayoutAdminGatewayRoute,
   LayoutAdminIpManagementRoute: LayoutAdminIpManagementRoute,

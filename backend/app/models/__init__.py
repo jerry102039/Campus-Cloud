@@ -42,6 +42,7 @@ from .batch_provision import (
 from .tunnel_proxy import TunnelProxy
 from .subnet_config import SubnetConfig
 from .ip_allocation import IpAllocation
+from .script_deploy_log import ScriptDeployLog
 
 __all__ = [
     # Base
@@ -102,4 +103,5 @@ __all__ = [
     # Subnet & IP Management
     "SubnetConfig",
     "IpAllocation",
+    "ScriptDeployLog",
 ]

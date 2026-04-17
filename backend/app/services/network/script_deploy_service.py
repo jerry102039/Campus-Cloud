@@ -52,7 +52,11 @@ class DeploymentTask:
     output: str = ""
     user_id: str = ""
     template_name: str = ""
+    template_slug: str = ""
+    script_path: str | None = None
+    hostname: str | None = None
     created_at: datetime = field(default_factory=datetime.now)
+    _last_persist_at: float = 0.0
 
 
 
@@ -64,9 +68,72 @@ _TASK_STORE = ExpiringStore[DeploymentTask](
     and now - task.created_at > ttl,
 )
 
+# DB 持久化節流（秒）—— running 狀態下最快 N 秒寫一次，
+# status 轉為 completed/failed 時一律強制寫入
+_PERSIST_MIN_INTERVAL_SEC = 2.0
+
+
+def _persist_task(task: DeploymentTask, *, force: bool = False) -> None:
+    """將任務狀態/輸出寫入資料庫。
+
+    - force=True 會忽略節流（用於 status 變更、終結狀態）
+    - 任何 DB 錯誤都只記 log、不影響部署流程
+    """
+    import time
+
+    terminal = task.status in {"completed", "failed"}
+    now = time.monotonic()
+    if not force and not terminal:
+        if now - task._last_persist_at < _PERSIST_MIN_INTERVAL_SEC:
+            return
+
+    try:
+        from sqlmodel import Session, select
+
+        from app.core.db import engine  # 延遲匯入避免循環
+        from app.models.base import get_datetime_utc
+        from app.models.script_deploy_log import ScriptDeployLog
+
+        user_uuid: uuid.UUID | None = None
+        if task.user_id:
+            try:
+                user_uuid = uuid.UUID(task.user_id)
+            except ValueError:
+                user_uuid = None
+
+        with Session(engine) as session:
+            existing = session.exec(
+                select(ScriptDeployLog).where(ScriptDeployLog.task_id == task.task_id)
+            ).first()
+            if existing is None:
+                existing = ScriptDeployLog(
+                    task_id=task.task_id,
+                    user_id=user_uuid,
+                    template_slug=task.template_slug or task.template_name or "unknown",
+                    template_name=task.template_name or None,
+                    script_path=task.script_path,
+                    hostname=task.hostname,
+                )
+                session.add(existing)
+
+            existing.vmid = task.vmid
+            existing.status = task.status
+            existing.progress = task.progress
+            existing.message = task.message
+            existing.error = task.error
+            existing.output = task.output
+            existing.updated_at = get_datetime_utc()
+            if terminal and existing.completed_at is None:
+                existing.completed_at = get_datetime_utc()
+            session.commit()
+        task._last_persist_at = now
+    except Exception:
+        logger.exception("Persist ScriptDeployLog failed (task_id=%s)", task.task_id)
+
 
 def _store_task(task: DeploymentTask) -> None:
     _TASK_STORE.upsert(task.task_id, task)
+    _persist_task(task)
 
 
 def get_task(task_id: str) -> DeploymentTask | None:
@@ -537,6 +604,9 @@ def start_deployment(
         task_id=task_id,
         user_id=user_id,
         template_name=request_data.get("os_info") or request_data.get("template_slug", ""),
+        template_slug=request_data.get("template_slug", ""),
+        script_path=request_data.get("script_path"),
+        hostname=request_data.get("hostname"),
     )
     _store_task(task)
 
@@ -578,6 +648,9 @@ def deploy_for_vm_request_sync(
         task_id=task_id,
         user_id=user_id,
         template_name=os_info or template_slug,
+        template_slug=template_slug,
+        script_path=script_path or f"ct/{template_slug}.sh",
+        hostname=hostname,
     )
     _store_task(task)
 

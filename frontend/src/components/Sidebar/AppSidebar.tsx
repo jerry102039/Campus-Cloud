@@ -92,6 +92,7 @@ export function AppSidebar() {
     { icon: Network, title: "Gateway VM", path: "/admin/gateway" },
     { icon: Wifi, title: "IP 管理", path: "/admin/ip-management" },
     { icon: ScrollText, title: "Audit Logs", path: "/admin/audit-logs" },
+    { icon: FileText, title: "部署 Log", path: "/admin/deploy-logs" },
   ]
 
   const items: Item[] = !currentUser
