@@ -19,15 +19,15 @@ router = APIRouter(prefix="/gpu", tags=["gpu"])
 
 
 @router.get("/mappings", response_model=GPUMappingsPublic)
-def list_gpu_mappings(current_user: CurrentUser):
-    """List all GPU (PCI) resource mappings with usage info."""
+def list_gpu_mappings(current_user: AdminUser):
+    """List all GPU (PCI) resource mappings with usage info (admin only)."""
     mappings = gpu_service.list_gpu_mappings()
     return GPUMappingsPublic(data=mappings, count=len(mappings))
 
 
 @router.get("/mappings/{mapping_id}", response_model=GPUMappingDetail)
-def get_gpu_mapping(mapping_id: str, current_user: CurrentUser):
-    """Get details of a specific GPU mapping."""
+def get_gpu_mapping(mapping_id: str, current_user: AdminUser):
+    """Get details of a specific GPU mapping (admin only)."""
     return gpu_service.get_gpu_mapping(mapping_id)
 
 

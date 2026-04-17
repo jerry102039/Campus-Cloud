@@ -55,8 +55,14 @@ def _extract_gpu_info(description: str, mapping_id: str) -> tuple[str, str, int]
         amount = int(vram_match.group(1))
         unit = vram_match.group(2).upper()
         if unit in ("MB", "MIB"):
-            vram = f"{amount // 1024} GB"
             vram_mb = amount
+            if amount < 1024:
+                vram = f"{amount} MB"
+            elif amount % 1024 == 0:
+                vram = f"{amount // 1024} GB"
+            else:
+                gb_amount = amount / 1024
+                vram = f"{gb_amount:.2f}".rstrip("0").rstrip(".") + " GB"
         else:
             vram = f"{amount} GB"
             vram_mb = amount * 1024
@@ -157,8 +163,9 @@ def _resolve_vram_for_mapping(
         mdev_type_vram = _get_mdev_types(first_map.node, first_map.path)
 
         # Total VRAM = largest mdev profile (full-card profile) × physical GPUs
-        if mdev_type_vram:
-            max_profile_vram = max(mdev_type_vram.values())
+        positive_profile_vram = [v for v in mdev_type_vram.values() if v > 0]
+        if positive_profile_vram:
+            max_profile_vram = max(positive_profile_vram)
             total_vram_mb = max_profile_vram * physical_gpu_count
         elif per_card_vram_mb:
             total_vram_mb = per_card_vram_mb * physical_gpu_count
