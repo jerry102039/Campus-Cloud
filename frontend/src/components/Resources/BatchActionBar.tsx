@@ -160,7 +160,7 @@ export function BatchActionBar({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t("resources:batch.deleteConfirm.title")}
+              {t("resources:batch.deleteConfirm.title", { count })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t("resources:batch.deleteConfirm.description", { count })}
