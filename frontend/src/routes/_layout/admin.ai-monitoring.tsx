@@ -1,3 +1,4 @@
+import { redirect } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import {
@@ -47,7 +48,10 @@ import {
 
 export const Route = createFileRoute("/_layout/admin/ai-monitoring")({
   component: AdminAiMonitoringPage,
-  beforeLoad: () => requireAdminUser(),
+  beforeLoad: () => {
+    requireAdminUser()
+    throw redirect({ to: "/admin/ai-management" })
+  },
 })
 
 const LIMIT = 50
