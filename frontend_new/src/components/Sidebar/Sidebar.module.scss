@@ -94,10 +94,9 @@
   flex-shrink: 0;
 }
 
-/* ===== Brand Divider ===== */
 .brandDivider {
   height: 1px;
-  background: var(--color-sidebar-glass-border);
+  background: color-mix(in srgb, var(--color-text-primary) 25%, transparent);
   margin: 0 $spacing-16;
   flex-shrink: 0;
 }
