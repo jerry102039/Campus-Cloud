@@ -289,6 +289,7 @@ def create_lxc(
             expiry_date=lxc_data.expiry_date,
             ssh_private_key_encrypted=encrypt_value(private_key_pem),
             ssh_public_key=public_key,
+            service_template_slug=lxc_data.service_template_slug,
             commit=False,
         )
 
@@ -333,6 +334,17 @@ def create_lxc(
         except Exception:
             logger.warning("Failed to release IP for LXC %d during cleanup", vmid)
         if created:
+            try:
+                rules = firewall_service.get_vm_firewall_rules(target_node, vmid, "lxc")
+                for r in sorted(rules, key=lambda x: x.get("pos", 0), reverse=True):
+                    pos = r.get("pos")
+                    if pos is not None:
+                        try:
+                            firewall_service.delete_rule_by_pos(target_node, vmid, "lxc", int(pos))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
             _cleanup_failed_resource(target_node, vmid, "lxc")
         logger.error(f"Failed to create LXC container: {e}")
         raise ProxmoxError(f"Failed to create LXC container: {e}")
@@ -385,6 +397,19 @@ def create_vm(
         if net_cfg.get("dns_servers"):
             config_updates["nameserver"] = net_cfg["dns_servers"]
         if vm_data.gpu_mapping_id:
+            from app.services.proxmox import gpu_service
+            try:
+                gpu_detail = gpu_service.get_gpu_mapping(vm_data.gpu_mapping_id)
+                if gpu_detail.available_count <= 0:
+                    raise ProxmoxError(
+                        f"GPU {vm_data.gpu_mapping_id} 已無可用插槽 "
+                        f"(used={gpu_detail.used_count}/{gpu_detail.device_count})"
+                    )
+            except ProxmoxError:
+                raise
+            except Exception as e:
+                logger.error("GPU 可用性檢查失敗 (%s): %s", vm_data.gpu_mapping_id, e)
+                raise ProxmoxError(f"無法驗證 GPU '{vm_data.gpu_mapping_id}'：{e}")
             config_updates["hostpci0"] = f"mapping={vm_data.gpu_mapping_id}"
         proxmox_service.update_config(target_node, new_vmid, "qemu", **config_updates)
 
@@ -408,6 +433,7 @@ def create_vm(
             template_id=vm_data.template_id,
             ssh_private_key_encrypted=encrypt_value(private_key_pem),
             ssh_public_key=public_key,
+            service_template_slug=vm_data.service_template_slug,
             commit=False,
         )
 
@@ -452,6 +478,17 @@ def create_vm(
         except Exception:
             logger.warning("Failed to release IP for VM %d during cleanup", new_vmid)
         if created:
+            try:
+                rules = firewall_service.get_vm_firewall_rules(target_node, new_vmid, "qemu")
+                for r in sorted(rules, key=lambda x: x.get("pos", 0), reverse=True):
+                    pos = r.get("pos")
+                    if pos is not None:
+                        try:
+                            firewall_service.delete_rule_by_pos(target_node, new_vmid, "qemu", int(pos))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
             _cleanup_failed_resource(target_node, new_vmid, "qemu")
         logger.error(f"Failed to create VM: {e}")
         raise ProxmoxError(f"Failed to create VM: {e}")
@@ -571,11 +608,17 @@ def execute_provision(plan: dict) -> tuple[int, str]:
 
     try:
         if resource_type == "lxc":
+            if not allocated_ip or not net_cfg or not net_cfg.get("bridge_name"):
+                raise ProxmoxError(
+                    f"網路設定不完整，無法建立 LXC VMID={new_vmid}（"
+                    f"allocated_ip={allocated_ip!r}, net_cfg={net_cfg!r}）。"
+                    "請確認 IP 管理子網設定。"
+                )
             net0_parts = (
-                f"name=eth0,bridge={net_cfg.get('bridge_name', 'vmbr0')},"
-                f"ip={allocated_ip}/{net_cfg.get('prefix_len', 24)},"
-                f"gw={net_cfg.get('gateway', '')},firewall=1"
-            ) if allocated_ip else "name=eth0,bridge=vmbr0,ip=dhcp,firewall=1"
+                f"name=eth0,bridge={net_cfg['bridge_name']},"
+                f"ip={allocated_ip}/{net_cfg['prefix_len']},"
+                f"gw={net_cfg['gateway']},firewall=1"
+            )
 
             config = {
                 "vmid": new_vmid,
@@ -645,12 +688,31 @@ def execute_provision(plan: dict) -> tuple[int, str]:
                 "sshkeys": quote(plan.get("ssh_public_key", ""), safe=""),
                 "ciupgrade": 0,
             }
-            if allocated_ip and net_cfg:
-                config_updates["net0"] = f"virtio,bridge={net_cfg.get('bridge_name', 'vmbr0')},firewall=1"
-                config_updates["ipconfig0"] = f"ip={allocated_ip}/{net_cfg.get('prefix_len', 24)},gw={net_cfg.get('gateway', '')}"
+            if allocated_ip and net_cfg and net_cfg.get("bridge_name"):
+                config_updates["net0"] = f"virtio,bridge={net_cfg['bridge_name']},firewall=1"
+                config_updates["ipconfig0"] = f"ip={allocated_ip}/{net_cfg['prefix_len']},gw={net_cfg['gateway']}"
                 if net_cfg.get("dns_servers"):
                     config_updates["nameserver"] = net_cfg["dns_servers"]
+            else:
+                raise ProxmoxError(
+                    f"網路設定不完整，無法建立 VM VMID={new_vmid}。"
+                    "請確認 IP 管理子網設定。"
+                )
             if plan.get("gpu_mapping_id"):
+                # Validate GPU availability before assigning
+                from app.services.proxmox import gpu_service
+                try:
+                    gpu_detail = gpu_service.get_gpu_mapping(plan["gpu_mapping_id"])
+                    if gpu_detail.available_count <= 0:
+                        raise ProxmoxError(
+                            f"GPU {plan['gpu_mapping_id']} 已無可用插槽 "
+                            f"(used={gpu_detail.used_count}/{gpu_detail.device_count})"
+                        )
+                except ProxmoxError:
+                    raise
+                except Exception as e:
+                    logger.error("GPU 可用性檢查失敗 (%s): %s", plan["gpu_mapping_id"], e)
+                    raise ProxmoxError(f"無法驗證 GPU '{plan['gpu_mapping_id']}'：{e}")
                 config_updates["hostpci0"] = f"mapping={plan['gpu_mapping_id']}"
             proxmox_service.update_config(actual_node, new_vmid, "qemu", **config_updates)
 
@@ -664,6 +726,18 @@ def execute_provision(plan: dict) -> tuple[int, str]:
                 proxmox_service.control(actual_node, new_vmid, "qemu", "start")
     except Exception:
         if created:
+            # Best-effort: drop any firewall rules created earlier on this VMID
+            try:
+                rules = firewall_service.get_vm_firewall_rules(actual_node, new_vmid, resource_type)
+                for rule in sorted(rules, key=lambda r: r.get("pos", 0), reverse=True):
+                    pos = rule.get("pos")
+                    if pos is not None:
+                        try:
+                            firewall_service.delete_rule_by_pos(actual_node, new_vmid, resource_type, int(pos))
+                        except Exception:
+                            pass
+            except Exception:
+                logger.debug("Firewall cleanup skipped for VMID %s", new_vmid)
             _cleanup_failed_resource(actual_node, new_vmid, resource_type)
         raise
 
@@ -694,6 +768,7 @@ def provision_from_request(*, session: Session, db_request) -> tuple[int, str | 
         template_id=getattr(db_request, "template_id", None),
         ssh_private_key_encrypted=plan.get("ssh_private_key_encrypted"),
         ssh_public_key=plan.get("ssh_public_key"),
+        service_template_slug=getattr(db_request, "service_template_slug", None),
         commit=False,
     )
     return new_vmid, actual_node, plan["placement_strategy"]

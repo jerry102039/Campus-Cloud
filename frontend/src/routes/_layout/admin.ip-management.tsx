@@ -1,8 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { toast } from "sonner"
+import { createFileRoute } from "@tanstack/react-router"
 import {
   AlertTriangle,
   Globe,
@@ -13,14 +10,10 @@ import {
   Trash2,
   Wifi,
 } from "lucide-react"
-
-import { requireAdminUser } from "@/features/auth/guards"
-import {
-  IpManagementApiService,
-  type SubnetConfigCreate,
-  type SubnetConfigPublic,
-  type IpAllocationPublic,
-} from "@/services/ipManagement"
+import { useState } from "react"
+import { useForm } from "react-hook-form"
+import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -29,8 +22,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -39,7 +30,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Table,
   TableBody,
@@ -48,6 +40,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
+import { requireAdminUser } from "@/features/auth/guards"
+import {
+  type IpAllocationPublic,
+  IpManagementApiService,
+  type SubnetConfigCreate,
+  type SubnetConfigPublic,
+} from "@/services/ipManagement"
 
 export const Route = createFileRoute("/_layout/admin/ip-management")({
   beforeLoad: () => requireAdminUser(),
@@ -92,9 +92,7 @@ function IpManagementPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">IP 管理</h1>
-        <p className="text-muted-foreground">
-          管理內部子網配置與 IP 位址分配
-        </p>
+        <p className="text-muted-foreground">管理內部子網配置與 IP 位址分配</p>
       </div>
 
       {configLoading ? (
@@ -203,9 +201,7 @@ function StatsCards({ config }: { config: SubnetConfigPublic }) {
         </CardHeader>
         <CardContent>
           <div className="text-xl font-bold">{config.used_ips}</div>
-          <p className="text-xs text-muted-foreground">
-            已使用 IP 數量
-          </p>
+          <p className="text-xs text-muted-foreground">已使用 IP 數量</p>
         </CardContent>
       </Card>
       <Card>
@@ -217,9 +213,7 @@ function StatsCards({ config }: { config: SubnetConfigPublic }) {
           <div className="text-xl font-bold text-green-600 dark:text-green-400">
             {config.available_ips}
           </div>
-          <p className="text-xs text-muted-foreground">
-            剩餘可分配 IP
-          </p>
+          <p className="text-xs text-muted-foreground">剩餘可分配 IP</p>
         </CardContent>
       </Card>
     </div>
@@ -235,7 +229,12 @@ function SubnetConfigForm({
   config?: SubnetConfigPublic
   onSaved: () => void
 }) {
-  const { register, handleSubmit, formState: { errors } } = useForm<SubnetConfigCreate>({
+  type FormValues = SubnetConfigCreate & { extra_blocked_subnets_text?: string }
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormValues>({
     defaultValues: config
       ? {
           cidr: config.cidr,
@@ -243,6 +242,9 @@ function SubnetConfigForm({
           bridge_name: config.bridge_name,
           gateway_vm_ip: config.gateway_vm_ip,
           dns_servers: config.dns_servers ?? "",
+          extra_blocked_subnets_text: (config.extra_blocked_subnets ?? []).join(
+            "\n",
+          ),
         }
       : {
           cidr: "",
@@ -250,15 +252,23 @@ function SubnetConfigForm({
           bridge_name: "vmbr1",
           gateway_vm_ip: "",
           dns_servers: "",
+          extra_blocked_subnets_text: "",
         },
   })
 
   const saveMutation = useMutation({
-    mutationFn: (data: SubnetConfigCreate) =>
-      IpManagementApiService.upsertSubnetConfig({
-        ...data,
+    mutationFn: (data: FormValues) => {
+      const extra = (data.extra_blocked_subnets_text ?? "")
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const { extra_blocked_subnets_text: _omit, ...rest } = data
+      return IpManagementApiService.upsertSubnetConfig({
+        ...rest,
         dns_servers: data.dns_servers || null,
-      }),
+        extra_blocked_subnets: extra,
+      })
+    },
     onSuccess: () => {
       toast.success("子網配置已儲存")
       onSaved()
@@ -303,7 +313,9 @@ function SubnetConfigForm({
                 })}
               />
               {errors.cidr && (
-                <p className="text-sm text-destructive">{errors.cidr.message}</p>
+                <p className="text-sm text-destructive">
+                  {errors.cidr.message}
+                </p>
               )}
             </div>
 
@@ -368,6 +380,22 @@ function SubnetConfigForm({
                 多個 DNS 以逗號分隔（選填）
               </p>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="extra_blocked_subnets_text">
+              預設封鎖網段 / IP（套用於所有 VM/LXC）
+            </Label>
+            <Textarea
+              id="extra_blocked_subnets_text"
+              placeholder="例如：&#10;192.168.100.0/24&#10;10.0.0.5"
+              rows={4}
+              {...register("extra_blocked_subnets_text")}
+            />
+            <p className="text-xs text-muted-foreground">
+              每行一個 CIDR 或 IP（也可用逗號分隔）。儲存時會在所有 VM/LXC
+              上建立/更新出站 DROP 規則並清除已移除的舊規則。
+            </p>
           </div>
 
           <div className="flex justify-end">
@@ -469,9 +497,8 @@ function DeleteSubnetDialog({
         <DialogHeader>
           <DialogTitle>刪除子網配置</DialogTitle>
           <DialogDescription>
-            確定要刪除子網配置嗎？如果仍有 VM/LXC 的 IP
-            分配記錄，需先移除相關 VM/LXC 才能刪除。刪除後所有 VM/LXC
-            建立功能將被停用。
+            確定要刪除子網配置嗎？如果仍有 VM/LXC 的 IP 分配記錄，需先移除相關
+            VM/LXC 才能刪除。刪除後所有 VM/LXC 建立功能將被停用。
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

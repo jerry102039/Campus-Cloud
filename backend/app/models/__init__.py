@@ -43,6 +43,7 @@ from .tunnel_proxy import TunnelProxy
 from .subnet_config import SubnetConfig
 from .ip_allocation import IpAllocation
 from .script_deploy_log import ScriptDeployLog
+from .deletion_request import DeletionRequest, DeletionRequestStatus
 
 __all__ = [
     # Base
@@ -104,4 +105,7 @@ __all__ = [
     "SubnetConfig",
     "IpAllocation",
     "ScriptDeployLog",
+    # Deletion Request
+    "DeletionRequest",
+    "DeletionRequestStatus",
 ]

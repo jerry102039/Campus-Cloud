@@ -1,9 +1,9 @@
 import {
   type ColumnDef,
-  type RowSelectionState,
   flexRender,
   getCoreRowModel,
   getPaginationRowModel,
+  type RowSelectionState,
   useReactTable,
 } from "@tanstack/react-table"
 import {
@@ -102,7 +102,10 @@ export function DataTable<TData, TValue>({
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>

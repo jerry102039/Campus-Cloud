@@ -36,6 +36,7 @@ def get_subnet_config(session: SessionDep, _: AdminUser):
         bridge_name=config.bridge_name,
         gateway_vm_ip=config.gateway_vm_ip,
         dns_servers=config.dns_servers,
+        extra_blocked_subnets=ip_management_service.get_extra_blocked_subnets(config),
         updated_at=config.updated_at,
         total_ips=stats["total"],
         used_ips=stats["used"],
@@ -57,7 +58,17 @@ def upsert_subnet_config(
         bridge_name=body.bridge_name,
         gateway_vm_ip=body.gateway_vm_ip,
         dns_servers=body.dns_servers,
+        extra_blocked_subnets=body.extra_blocked_subnets,
     )
+    # 同步所有 VM/LXC 的封鎖規則 dest 為新子網與額外封鎖網段
+    try:
+        from app.services.network import firewall_service  # noqa: PLC0415
+        firewall_service.sync_block_local_subnet_rules()
+    except Exception as e:
+        import logging  # noqa: PLC0415
+        logging.getLogger(__name__).warning(
+            "同步預設封鎖防火牆規則失敗（非致命）: %s", e
+        )
     stats = ip_management_service.get_ip_stats(session)
     return SubnetConfigPublic(
         cidr=config.cidr,
@@ -65,6 +76,7 @@ def upsert_subnet_config(
         bridge_name=config.bridge_name,
         gateway_vm_ip=config.gateway_vm_ip,
         dns_servers=config.dns_servers,
+        extra_blocked_subnets=ip_management_service.get_extra_blocked_subnets(config),
         updated_at=config.updated_at,
         total_ips=stats["total"],
         used_ips=stats["used"],

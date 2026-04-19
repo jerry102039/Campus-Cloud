@@ -110,6 +110,7 @@ def _adopt_existing_resource(
             os_info=request.os_info,
             expiry_date=request.expiry_date,
             template_id=request.template_id,
+            service_template_slug=getattr(request, "service_template_slug", None),
             commit=False,
         )
     vm_request_repo.update_vm_request_provisioning(
@@ -217,6 +218,7 @@ def _provision_new_resource(
     request_template_id = request.template_id
     request_resource_type = request.resource_type
     request_migration_pinned = request.migration_pinned
+    request_service_template_slug = getattr(request, "service_template_slug", None)
 
     # Close session so clone runs outside any transaction.
     session.commit()
@@ -263,6 +265,7 @@ def _provision_new_resource(
             template_id=request_template_id,
             ssh_private_key_encrypted=plan.get("ssh_private_key_encrypted"),
             ssh_public_key=plan.get("ssh_public_key"),
+            service_template_slug=request_service_template_slug,
             commit=False,
         )
         vm_request_repo.update_vm_request_provisioning(
@@ -338,6 +341,12 @@ def _provision_via_service_template(
     memory = int(request.memory or 2048)
     disk = int(request.rootfs_size or 8)
 
+    # Generate SSH key pair so the platform can manage the container after deploy
+    from app.core.security import encrypt_value
+    from app.infrastructure.ssh.client import generate_ed25519_keypair
+    private_key_pem, public_key = generate_ed25519_keypair()
+    encrypted_private_key = encrypt_value(private_key_pem)
+
     try:
         password_plain = decrypt_value(request.password)
     except Exception as exc:
@@ -353,44 +362,62 @@ def _provision_via_service_template(
         request_id, template_slug,
     )
 
-    # ── 預先分配 IP（若有設定子網）──────────────────────────────────────
+    # ── 預先分配 IP（必要：服務模板需要靜態 IP，不允許 silent fallback 到 DHCP）──
     # 使用 proxmox_service.next_vmid() 取得候選 CTID，分配 IP 後傳給 community-scripts。
     # 若部署後實際建立的 VMID 與候選不同，稍後會更新 IpAllocation.vmid 對應。
-    candidate_vmid: int | None = None
-    allocated_ip: str | None = None
-    deploy_net: dict | None = None
-    try:
-        from app.services.network import ip_management_service
-        with Session(engine) as prep_session:
-            try:
-                net_cfg = ip_management_service.get_network_config_for_vm(prep_session)
-            except Exception as exc:
-                logger.warning(
-                    "子網未設定或讀取失敗，服務模板將使用 DHCP: %s", exc,
+    from app.services.network import ip_management_service
+    with Session(engine) as prep_session:
+        try:
+            net_cfg = ip_management_service.get_network_config_for_vm(prep_session)
+        except Exception as exc:
+            logger.error(
+                "子網未設定或讀取失敗，服務模板部署中止（不使用 DHCP fallback）: %s",
+                exc,
+            )
+            with Session(engine) as rb:
+                req = vm_request_repo.get_vm_request_by_id(
+                    session=rb, request_id=request_id, for_update=True,
                 )
-                net_cfg = None
+                if req and req.status == VMRequestStatus.provisioning:
+                    req.status = VMRequestStatus.approved
+                    rb.add(req)
+                    rb.commit()
+            raise RuntimeError(
+                f"無法取得 IP 管理子網設定，請先到「網路 → IP 管理」設定子網：{exc}"
+            ) from exc
 
-            if net_cfg is not None:
-                candidate_vmid = proxmox_service.next_vmid()
-                allocated_ip = ip_management_service.allocate_ip(
-                    prep_session, candidate_vmid, "lxc",
+        candidate_vmid = proxmox_service.next_vmid()
+        try:
+            allocated_ip = ip_management_service.allocate_ip(
+                prep_session, candidate_vmid, "lxc",
+            )
+            prep_session.commit()
+        except Exception as exc:
+            prep_session.rollback()
+            logger.error(
+                "為候選 VMID %s 預留 IP 失敗（不使用 DHCP fallback）: %s",
+                candidate_vmid, exc,
+            )
+            with Session(engine) as rb:
+                req = vm_request_repo.get_vm_request_by_id(
+                    session=rb, request_id=request_id, for_update=True,
                 )
-                prep_session.commit()
-                logger.info(
-                    "已為候選 VMID %s 預留 IP %s (服務模板 %s)",
-                    candidate_vmid, allocated_ip, template_slug,
-                )
-                deploy_net = {
-                    "ip_cidr": f"{allocated_ip}/{net_cfg['prefix_len']}",
-                    "gateway": net_cfg.get("gateway"),
-                    "bridge": net_cfg.get("bridge_name"),
-                    "nameserver": net_cfg.get("dns_servers"),
-                }
-    except Exception as exc:
-        logger.warning("預留 IP 失敗，改用 DHCP: %s", exc)
-        candidate_vmid = None
-        allocated_ip = None
-        deploy_net = None
+                if req and req.status == VMRequestStatus.provisioning:
+                    req.status = VMRequestStatus.approved
+                    rb.add(req)
+                    rb.commit()
+            raise RuntimeError(f"無法分配靜態 IP：{exc}") from exc
+
+        logger.info(
+            "已為候選 VMID %s 預留 IP %s (服務模板 %s)",
+            candidate_vmid, allocated_ip, template_slug,
+        )
+        deploy_net = {
+            "ip_cidr": f"{allocated_ip}/{net_cfg['prefix_len']}",
+            "gateway": net_cfg.get("gateway"),
+            "bridge": net_cfg.get("bridge_name"),
+            "nameserver": net_cfg.get("dns_servers"),
+        }
 
     try:
         new_vmid, _task = script_deploy_service.deploy_for_vm_request_sync(
@@ -407,6 +434,9 @@ def _provision_via_service_template(
             environment_type=request_env_type,
             os_info=request_os_info,
             net_config=deploy_net,
+            ssh_public_key=public_key,
+            request_id=str(request.id),
+            candidate_vmid=candidate_vmid,
         )
     except Exception as exc:
         logger.error(
@@ -441,7 +471,10 @@ def _provision_via_service_template(
 
     # 若實際建立的 VMID 與候選不同，更新 IpAllocation 讓 vmid 指向真實容器
     if candidate_vmid is not None and new_vmid != candidate_vmid:
+        update_ok = False
         try:
+            # 先驗證 new_vmid 在 PVE 確實存在再重新指派
+            proxmox_service.find_resource(new_vmid)
             with Session(engine) as fix_session:
                 alloc = fix_session.exec(
                     select(IpAllocation).where(IpAllocation.vmid == candidate_vmid)
@@ -451,12 +484,26 @@ def _provision_via_service_template(
                     alloc.description = f"VMID {new_vmid}"
                     fix_session.add(alloc)
                     fix_session.commit()
+                    update_ok = True
                     logger.info(
                         "已將 IpAllocation 從候選 VMID %s 更新為實際 VMID %s",
                         candidate_vmid, new_vmid,
                     )
+                else:
+                    update_ok = True  # 沒有可遷的紀錄，視為已完成
         except Exception as exc:
             logger.warning("更新 IpAllocation.vmid 失敗: %s", exc)
+
+        if not update_ok:
+            # 為避免 IP 洩漏，強制把候選 VMID 上的 IP 釋放
+            try:
+                from app.services.network import ip_management_service
+                with Session(engine) as orphan_rb:
+                    ip_management_service.release_ip(orphan_rb, candidate_vmid)
+                    orphan_rb.commit()
+                logger.info("已強制釋放孤立 IP（候選 VMID %s）", candidate_vmid)
+            except Exception as release_exc:
+                logger.error("孤立 IP 釋放失敗（候選 VMID %s）: %s", candidate_vmid, release_exc)
 
     with Session(engine) as finish_session:
         req = vm_request_repo.get_vm_request_by_id(
@@ -472,6 +519,9 @@ def _provision_via_service_template(
             environment_type=request_env_type,
             os_info=request_os_info,
             expiry_date=request_expiry_date,
+            ssh_private_key_encrypted=encrypted_private_key,
+            ssh_public_key=public_key,
+            service_template_slug=template_slug or None,
             commit=False,
         )
         vm_request_repo.update_vm_request_provisioning(
@@ -1559,6 +1609,20 @@ async def run_scheduler(stop_event: asyncio.Event) -> None:
         tasks=[
             ScheduledTask(name="process_due_request_starts", handler=process_due_request_starts),
             ScheduledTask(name="process_due_request_stops", handler=process_due_request_stops),
+            ScheduledTask(name="process_pending_deletions", handler=process_pending_deletions_task),
         ],
     )
     logger.info("VM request scheduler stopped")
+
+
+def process_pending_deletions_task() -> int:
+    """Scheduler tick：處理一筆 pending DeletionRequest（每 tick 最多一筆，避免長阻塞）。"""
+    from app.services.resource import deletion_service  # noqa: PLC0415 — 避免 import cycle
+
+    try:
+        with Session(engine) as session:
+            deletion_service.process_pending_deletions(session)
+        return 0
+    except Exception:
+        logger.exception("process_pending_deletions_task failed")
+        return 0

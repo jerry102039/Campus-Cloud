@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import DateTime
 from sqlmodel import Field, SQLModel
 
@@ -23,6 +24,7 @@ class SubnetConfig(SQLModel, table=True):
     bridge_name: str = Field(max_length=50)
     gateway_vm_ip: str = Field(max_length=50)
     dns_servers: str | None = Field(default=None, max_length=255)
+    extra_blocked_subnets: str | None = Field(default=None, sa_type=sa.Text())
     updated_at: datetime = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),

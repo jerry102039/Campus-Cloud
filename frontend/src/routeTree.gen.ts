@@ -20,6 +20,7 @@ import { Route as LayoutReverseProxyRouteImport } from './routes/_layout/reverse
 import { Route as LayoutResourcesCreateRouteImport } from './routes/_layout/resources-create'
 import { Route as LayoutResourcesRouteImport } from './routes/_layout/resources'
 import { Route as LayoutMyResourcesRouteImport } from './routes/_layout/my-resources'
+import { Route as LayoutJobsRouteImport } from './routes/_layout/jobs'
 import { Route as LayoutGroupsRouteImport } from './routes/_layout/groups'
 import { Route as LayoutGpuManagementRouteImport } from './routes/_layout/gpu-management'
 import { Route as LayoutFirewallRouteImport } from './routes/_layout/firewall'
@@ -98,6 +99,11 @@ const LayoutResourcesRoute = LayoutResourcesRouteImport.update({
 const LayoutMyResourcesRoute = LayoutMyResourcesRouteImport.update({
   id: '/my-resources',
   path: '/my-resources',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutJobsRoute = LayoutJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutGroupsRoute = LayoutGroupsRouteImport.update({
@@ -248,6 +254,7 @@ export interface FileRoutesByFullPath {
   '/firewall': typeof LayoutFirewallRoute
   '/gpu-management': typeof LayoutGpuManagementRoute
   '/groups': typeof LayoutGroupsRoute
+  '/jobs': typeof LayoutJobsRoute
   '/my-resources': typeof LayoutMyResourcesRoute
   '/resources': typeof LayoutResourcesRoute
   '/resources-create': typeof LayoutResourcesCreateRoute
@@ -283,6 +290,7 @@ export interface FileRoutesByTo {
   '/firewall': typeof LayoutFirewallRoute
   '/gpu-management': typeof LayoutGpuManagementRoute
   '/groups': typeof LayoutGroupsRoute
+  '/jobs': typeof LayoutJobsRoute
   '/my-resources': typeof LayoutMyResourcesRoute
   '/resources': typeof LayoutResourcesRoute
   '/resources-create': typeof LayoutResourcesCreateRoute
@@ -322,6 +330,7 @@ export interface FileRoutesById {
   '/_layout/firewall': typeof LayoutFirewallRoute
   '/_layout/gpu-management': typeof LayoutGpuManagementRoute
   '/_layout/groups': typeof LayoutGroupsRoute
+  '/_layout/jobs': typeof LayoutJobsRoute
   '/_layout/my-resources': typeof LayoutMyResourcesRoute
   '/_layout/resources': typeof LayoutResourcesRoute
   '/_layout/resources-create': typeof LayoutResourcesCreateRoute
@@ -362,6 +371,7 @@ export interface FileRouteTypes {
     | '/firewall'
     | '/gpu-management'
     | '/groups'
+    | '/jobs'
     | '/my-resources'
     | '/resources'
     | '/resources-create'
@@ -397,6 +407,7 @@ export interface FileRouteTypes {
     | '/firewall'
     | '/gpu-management'
     | '/groups'
+    | '/jobs'
     | '/my-resources'
     | '/resources'
     | '/resources-create'
@@ -435,6 +446,7 @@ export interface FileRouteTypes {
     | '/_layout/firewall'
     | '/_layout/gpu-management'
     | '/_layout/groups'
+    | '/_layout/jobs'
     | '/_layout/my-resources'
     | '/_layout/resources'
     | '/_layout/resources-create'
@@ -543,6 +555,13 @@ declare module '@tanstack/react-router' {
       path: '/my-resources'
       fullPath: '/my-resources'
       preLoaderRoute: typeof LayoutMyResourcesRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/jobs': {
+      id: '/_layout/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof LayoutJobsRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/groups': {
@@ -762,6 +781,7 @@ interface LayoutRouteChildren {
   LayoutFirewallRoute: typeof LayoutFirewallRoute
   LayoutGpuManagementRoute: typeof LayoutGpuManagementRoute
   LayoutGroupsRoute: typeof LayoutGroupsRoute
+  LayoutJobsRoute: typeof LayoutJobsRoute
   LayoutMyResourcesRoute: typeof LayoutMyResourcesRoute
   LayoutResourcesRoute: typeof LayoutResourcesRoute
   LayoutResourcesCreateRoute: typeof LayoutResourcesCreateRoute
@@ -787,6 +807,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutFirewallRoute: LayoutFirewallRoute,
   LayoutGpuManagementRoute: LayoutGpuManagementRoute,
   LayoutGroupsRoute: LayoutGroupsRoute,
+  LayoutJobsRoute: LayoutJobsRoute,
   LayoutMyResourcesRoute: LayoutMyResourcesRoute,
   LayoutResourcesRoute: LayoutResourcesRoute,
   LayoutResourcesCreateRoute: LayoutResourcesCreateRoute,

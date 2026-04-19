@@ -73,6 +73,43 @@ def get_deploy_status(
     )
 
 
+@router.post("/cancel/{task_id}")
+def cancel_deployment(
+    task_id: str,
+    current_user: AdminUser,
+) -> dict:
+    """取消正在執行的部署任務。
+
+    觸發背景部署執行緒在最近的檢查點中斷 → 走 rollback 流程，
+    自動銷毀已建立的容器並釋放預分配的 IP。
+    """
+    task = script_deploy_service.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="找不到該部署任務")
+    if task.status != "running":
+        raise HTTPException(
+            status_code=400,
+            detail=f"任務狀態為 {task.status}，僅 running 任務可以取消",
+        )
+
+    ok = script_deploy_service.cancel_task(task_id)
+    if not ok:
+        raise HTTPException(
+            status_code=409,
+            detail="取消請求送出失敗（任務可能剛剛結束或尚未進入可取消階段）",
+        )
+
+    logger.info(
+        "User %s requested cancel for deployment task %s",
+        current_user.email,
+        task_id,
+    )
+    return {
+        "task_id": task_id,
+        "message": "取消請求已送出，部署將在最近的檢查點停止並回滾",
+    }
+
+
 @router.post("/register/{task_id}")
 def register_deployed_resource(
     task_id: str,

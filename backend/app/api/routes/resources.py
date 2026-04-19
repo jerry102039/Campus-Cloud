@@ -11,9 +11,10 @@ from app.api.deps import (
 from app.core.security import decrypt_value
 from app.exceptions import ProxmoxError
 from app.schemas import Message, NodeSchema, ResourcePublic, SSHKeyResponse
+from app.schemas.deletion_request import DeletionRequestCreated
 from app.schemas.resource import BatchActionRequest, BatchActionResponse
 from app.services.proxmox import proxmox_service
-from app.services.resource import resource_service
+from app.services.resource import deletion_service, resource_service
 from app.repositories import resource as resource_repo
 
 logger = logging.getLogger(__name__)
@@ -152,7 +153,7 @@ def reset_resource(
     )
 
 
-@router.delete("/{vmid}")
+@router.delete("/{vmid}", response_model=DeletionRequestCreated, status_code=202)
 def delete_resource(
     vmid: int,
     session: SessionDep,
@@ -161,13 +162,23 @@ def delete_resource(
     purge: bool = True,
     force: bool = False,
 ):
-    return resource_service.delete(
+    """將刪除請求加入背景佇列，立即回應 202。
+
+    實際刪除由 scheduler 的 `process_pending_deletions` tick 執行。
+    """
+    req = deletion_service.create_deletion_request(
         session=session,
+        user_id=current_user.id,
         vmid=vmid,
         resource_info=resource_info,
-        user_id=current_user.id,
         purge=purge,
         force=force,
+    )
+    return DeletionRequestCreated(
+        id=req.id,
+        vmid=req.vmid,
+        status=req.status,
+        message="Deletion request queued",
     )
 
 

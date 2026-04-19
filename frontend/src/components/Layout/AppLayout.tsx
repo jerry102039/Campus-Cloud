@@ -1,12 +1,13 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
+import { Link, Outlet, useRouterState } from "@tanstack/react-router"
 import { AlertTriangle } from "lucide-react"
 
 import { Footer } from "@/components/Common/Footer"
+import { JobsBanner } from "@/components/Jobs/JobsBanner"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { cn } from "@/lib/utils"
 import useAuth from "@/hooks/useAuth"
+import { cn } from "@/lib/utils"
 import { IpManagementApiService } from "@/services/ipManagement"
 
 // 這些路由會填滿整個內容區域，不套用 padding / max-width / footer
@@ -26,6 +27,7 @@ export function AppLayout() {
       <SidebarProvider defaultOpen={false}>
         <AppSidebar />
         <SidebarInset className="min-w-0 overflow-x-hidden">
+          <JobsBanner />
           <SubnetBanner isAdmin={isAdmin} />
           {isFullscreen ? (
             <main className="flex-1 min-w-0 overflow-hidden">

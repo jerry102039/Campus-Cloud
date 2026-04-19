@@ -1,6 +1,6 @@
-import type { RowSelectionState } from "@tanstack/react-table"
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import type { RowSelectionState } from "@tanstack/react-table"
 import { Download, Monitor, RefreshCw } from "lucide-react"
 import { Suspense, useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -161,7 +161,11 @@ function DownloadDesktopClientButton() {
 
   return (
     <div className="flex flex-col gap-2">
-      <Button variant="outline" onClick={handleDownload} disabled={isDownloading}>
+      <Button
+        variant="outline"
+        onClick={handleDownload}
+        disabled={isDownloading}
+      >
         <Download className="mr-2 h-4 w-4" />
         {isDownloading ? "下載中..." : "下載連線工具"}
       </Button>
@@ -184,7 +188,10 @@ function MyResources() {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
 
   const selectedVmids = useMemo(
-    () => Object.keys(rowSelection).filter((k) => rowSelection[k]).map(Number),
+    () =>
+      Object.keys(rowSelection)
+        .filter((k) => rowSelection[k])
+        .map(Number),
     [rowSelection],
   )
 

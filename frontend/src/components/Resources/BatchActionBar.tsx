@@ -1,12 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  Play,
-  Power,
-  RotateCcw,
-  Square,
-  Trash2,
-  XCircle,
-} from "lucide-react"
+import { Play, Power, RotateCcw, Square, Trash2, XCircle } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -49,7 +42,10 @@ export function BatchActionBar({
       const { succeeded, failed } = data
       if (failed === 0) {
         showSuccessToast(
-          t("resources:batch.success", { count: succeeded, action: t(`resources:batch.actions.${action}`) }),
+          t("resources:batch.success", {
+            count: succeeded,
+            action: t(`resources:batch.actions.${action}`),
+          }),
         )
       } else {
         showErrorToast(

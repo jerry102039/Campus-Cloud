@@ -14,6 +14,7 @@ class SubnetConfigCreate(BaseModel):
     bridge_name: str
     gateway_vm_ip: str
     dns_servers: str | None = None
+    extra_blocked_subnets: list[str] = []
 
     @field_validator("cidr")
     @classmethod
@@ -35,6 +36,36 @@ class SubnetConfigCreate(BaseModel):
             raise ValueError(f"無效的 IP 位址: {e}") from e
         return v
 
+    @field_validator("extra_blocked_subnets", mode="before")
+    @classmethod
+    def normalize_blocks(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            v = [s.strip() for s in v.replace("\n", ",").split(",")]
+        return [s for s in v if s and s.strip()]
+
+    @field_validator("extra_blocked_subnets")
+    @classmethod
+    def validate_blocks(cls, v: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in v:
+            item = item.strip()
+            if not item:
+                continue
+            try:
+                if "/" in item:
+                    parsed = str(ipaddress.IPv4Network(item, strict=False))
+                else:
+                    parsed = str(ipaddress.IPv4Address(item))
+            except (ipaddress.AddressValueError, ValueError) as e:
+                raise ValueError(f"無效的封鎖網段/IP '{item}': {e}") from e
+            if parsed not in seen:
+                seen.add(parsed)
+                normalized.append(parsed)
+        return normalized
+
 
 class SubnetConfigPublic(BaseModel):
     """子網配置公開回傳格式"""
@@ -44,6 +75,7 @@ class SubnetConfigPublic(BaseModel):
     bridge_name: str
     gateway_vm_ip: str
     dns_servers: str | None
+    extra_blocked_subnets: list[str] = []
     updated_at: datetime
     total_ips: int
     used_ips: int

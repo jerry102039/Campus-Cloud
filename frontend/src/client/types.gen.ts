@@ -2003,6 +2003,10 @@ export type LxcCreateRequest = {
      * Unprivileged
      */
     unprivileged?: boolean;
+    /**
+     * Service Template Slug
+     */
+    service_template_slug?: string | null;
 };
 
 /**
@@ -3255,6 +3259,10 @@ export type ResourcePublic = {
      */
     ssh_public_key?: string | null;
     /**
+     * Service Template Slug
+     */
+    service_template_slug?: string | null;
+    /**
      * Cpu
      */
     cpu?: number | null;
@@ -4433,6 +4441,10 @@ export type VmCreateRequest = {
      * Start
      */
     start?: boolean;
+    /**
+     * Service Template Slug
+     */
+    service_template_slug?: string | null;
 };
 
 /**

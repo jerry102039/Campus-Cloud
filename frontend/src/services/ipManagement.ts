@@ -14,6 +14,7 @@ export type SubnetConfigCreate = {
   bridge_name: string
   gateway_vm_ip: string
   dns_servers?: string | null
+  extra_blocked_subnets?: string[]
 }
 
 export type SubnetConfigPublic = {
@@ -22,6 +23,7 @@ export type SubnetConfigPublic = {
   bridge_name: string
   gateway_vm_ip: string
   dns_servers: string | null
+  extra_blocked_subnets: string[]
   updated_at: string
   total_ips: number
   used_ips: number

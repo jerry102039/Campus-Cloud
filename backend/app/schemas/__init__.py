@@ -91,6 +91,11 @@ from .user import (
     UserUpdate,
     UserUpdateMe,
 )
+from .deletion_request import (
+    DeletionRequestCreated,
+    DeletionRequestPublic,
+    DeletionRequestsPublic,
+)
 from .vm_request import (
     VMRequestAvailabilityDay,
     VMRequestAvailabilityNodeSnapshot,
@@ -158,6 +163,10 @@ __all__ = [
     "Token",
     "TokenPayload",
     "NewPassword",
+    # Deletion Request
+    "DeletionRequestCreated",
+    "DeletionRequestPublic",
+    "DeletionRequestsPublic",
     # AI API
     "AIAPIRequestCreate",
     "AIAPIRequestReview",

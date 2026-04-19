@@ -10,12 +10,14 @@ from app.api.routes import (
     audit_logs,
     batch_provision,
     cloudflare,
+    deletion_requests,
     desktop_client,
     firewall,
     gateway,
     gpu,
     groups,
     ip_management,
+    jobs,
     login,
     lxc,
     migration_jobs,
@@ -44,6 +46,7 @@ api_router.include_router(resource_details.router)
 api_router.include_router(vm.router)
 api_router.include_router(lxc.router)
 api_router.include_router(vm_requests.router)
+api_router.include_router(deletion_requests.router)
 api_router.include_router(migration_jobs.router)
 api_router.include_router(ai_api.router)
 api_router.include_router(ai_monitoring.router)
@@ -63,6 +66,7 @@ api_router.include_router(gateway.router)
 api_router.include_router(gpu.router)
 api_router.include_router(ip_management.router)
 api_router.include_router(script_deploy.router)
+api_router.include_router(jobs.router)
 api_router.include_router(rubric.router)
 api_router.include_router(tunnel.router)
 api_router.include_router(desktop_client.router)

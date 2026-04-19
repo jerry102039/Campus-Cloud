@@ -95,6 +95,9 @@ def _build_resource_public(
         expiry_date=db_resource.expiry_date if db_resource else None,
         ip_address=ip_address,
         ssh_public_key=db_resource.ssh_public_key if db_resource else None,
+        service_template_slug=(
+            db_resource.service_template_slug if db_resource else None
+        ),
         cpu=resource.get("cpu"),
         maxcpu=resource.get("maxcpu"),
         mem=resource.get("mem"),

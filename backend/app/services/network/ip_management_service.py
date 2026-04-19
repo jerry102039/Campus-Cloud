@@ -28,6 +28,21 @@ def get_subnet_config(session: Session) -> SubnetConfig | None:
     return session.get(SubnetConfig, 1)
 
 
+def get_extra_blocked_subnets(config: SubnetConfig | None) -> list[str]:
+    """解析 extra_blocked_subnets 欄位為 list[str]（已過濾與去重）。"""
+    if config is None or not config.extra_blocked_subnets:
+        return []
+    raw = config.extra_blocked_subnets.replace("\n", ",")
+    items = [s.strip() for s in raw.split(",")]
+    seen: set[str] = set()
+    out: list[str] = []
+    for s in items:
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
 def upsert_subnet_config(
     session: Session,
     *,
@@ -36,6 +51,7 @@ def upsert_subnet_config(
     bridge_name: str,
     gateway_vm_ip: str,
     dns_servers: str | None = None,
+    extra_blocked_subnets: list[str] | None = None,
 ) -> SubnetConfig:
     """設定或更新子網配置，並保留系統 IP。
 
@@ -78,6 +94,10 @@ def upsert_subnet_config(
         existing.bridge_name = bridge_name
         existing.gateway_vm_ip = gateway_vm_ip
         existing.dns_servers = dns_servers
+        if extra_blocked_subnets is not None:
+            existing.extra_blocked_subnets = (
+                ",".join(extra_blocked_subnets) if extra_blocked_subnets else None
+            )
         existing.updated_at = get_datetime_utc()
         session.add(existing)
         config = existing
@@ -89,6 +109,11 @@ def upsert_subnet_config(
             bridge_name=bridge_name,
             gateway_vm_ip=gateway_vm_ip,
             dns_servers=dns_servers,
+            extra_blocked_subnets=(
+                ",".join(extra_blocked_subnets)
+                if extra_blocked_subnets
+                else None
+            ),
         )
         session.add(config)
 
@@ -180,8 +205,7 @@ def allocate_ip(session: Session, vmid: int, purpose: str) -> str:
 
     # 取得所有已分配的 IP
     allocated = set(
-        row.ip_address
-        for row in session.exec(select(IpAllocation.ip_address)).all()
+        session.exec(select(IpAllocation.ip_address)).all()
     )
 
     # 遍歷 host IPs（排除 network 和 broadcast）
@@ -196,7 +220,7 @@ def allocate_ip(session: Session, vmid: int, purpose: str) -> str:
             )
             session.add(alloc)
             session.flush()
-            logger.info("已為 VMID %d 分配 IP %s (purpose=%s)", vmid, ip_str, purpose)
+            logger.info("已為 VMID %s 分配 IP %s (purpose=%s)", vmid, ip_str, purpose)
             return ip_str
 
     raise ConflictError("IP 地址已耗盡，無法分配新的 IP")
@@ -208,13 +232,13 @@ def release_ip(session: Session, vmid: int) -> str | None:
         select(IpAllocation).where(IpAllocation.vmid == vmid)
     ).first()
     if alloc is None:
-        logger.debug("VMID %d 無 IP 分配記錄，跳過釋放", vmid)
+        logger.debug("VMID %s 無 IP 分配記錄，跳過釋放", vmid)
         return None
 
     ip = alloc.ip_address
     session.delete(alloc)
     session.flush()
-    logger.info("已釋放 VMID %d 的 IP %s", vmid, ip)
+    logger.info("已釋放 VMID %s 的 IP %s", vmid, ip)
     return ip
 
 
