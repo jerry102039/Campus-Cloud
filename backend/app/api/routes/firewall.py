@@ -243,7 +243,6 @@ def list_rules(
                 ),
             )
             for i, r in enumerate(rules)
-        
         ]
     except ProxmoxError as e:
         raise HTTPException(status_code=500, detail=str(e))
