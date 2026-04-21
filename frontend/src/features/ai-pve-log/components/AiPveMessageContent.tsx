@@ -20,7 +20,7 @@ type LocalMessage = {
 /**
  * AI PVE Message Content Block - extracted from Page
  */
-export function AiPveMessageContent({ groupId }: { groupId: string }) {
+export function AiPveMessageContent({ groupId: _groupId }: { groupId: string }) {
   const { showErrorToast } = useCustomToast()
 
   const [input, setInput] = useState("")
