@@ -22,7 +22,7 @@ import useCustomToast from "@/hooks/useCustomToast"
 /**
  * AI Judge Content Block - extracted from Page
  */
-export function AiJudgeContent({ groupId }: { groupId: string }) {
+export function AiJudgeContent({ groupId: _groupId }: { groupId: string }) {
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   // State
