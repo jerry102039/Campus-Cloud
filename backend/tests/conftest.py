@@ -1,6 +1,12 @@
 import os
 from collections.abc import Generator
 
+# Disable background jobs that reach external systems (Proxmox API, etc.)
+# before any app module is imported — otherwise settings caches the default.
+# CI runners cannot reach Proxmox, so scheduler ticks would time out and
+# block TestClient startup.
+os.environ.setdefault("SCHEDULER_ENABLED", "false")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select

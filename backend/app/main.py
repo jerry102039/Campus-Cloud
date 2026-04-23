@@ -91,18 +91,21 @@ async def lifespan(app: FastAPI):
     await init_redis()
     init_background_runner()
     stop_event = asyncio.Event()
-    scheduler_task = asyncio.create_task(
-        vm_request_schedule_service.run_scheduler(stop_event)
-    )
+    scheduler_task: asyncio.Task[None] | None = None
+    if settings.SCHEDULER_ENABLED:
+        scheduler_task = asyncio.create_task(
+            vm_request_schedule_service.run_scheduler(stop_event)
+        )
     try:
         yield
     finally:
         stop_event.set()
-        scheduler_task.cancel()
-        try:
-            await scheduler_task
-        except asyncio.CancelledError:
-            pass
+        if scheduler_task is not None:
+            scheduler_task.cancel()
+            try:
+                await scheduler_task
+            except asyncio.CancelledError:
+                pass
         await shutdown_background_runner()
         await close_redis()
 
