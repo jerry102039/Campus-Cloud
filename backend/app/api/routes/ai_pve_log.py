@@ -17,6 +17,9 @@ from app.ai.pve_log.schemas import (
     ResourceSummary,
     StorageInfo,
     SystemSnapshot,
+    SSHExecRequest,
+    SSHExecResult,
+    SSHConfirmRequest,
 )
 from app.api.deps import InstructorUser
 
@@ -129,7 +132,35 @@ async def chat(
     _current_user: InstructorUser,
 ) -> ChatResponse:
     try:
-        return await pve_chat(request.message)
+        return await pve_chat(message=request.message, history=request.messages)
     except Exception:
         logger.exception("AI-PVE 對話失敗")
         raise HTTPException(status_code=500, detail="AI-PVE 對話失敗")
+
+
+@router.post("/ssh/exec", response_model=SSHExecResult, tags=["ai-pve-log-ssh"])
+async def post_ssh_exec(
+    request: SSHExecRequest,
+    _current_user: InstructorUser,
+) -> SSHExecResult:
+    from app.ai.pve_log.ssh_exec import ssh_exec as _ssh_exec
+
+    try:
+        return await _ssh_exec(request)
+    except Exception as exc:
+        logger.exception("SSH 執行失敗")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/ssh/confirm", response_model=SSHExecResult, tags=["ai-pve-log-ssh"])
+async def post_ssh_confirm(
+    request: SSHConfirmRequest,
+    _current_user: InstructorUser,
+) -> SSHExecResult:
+    from app.ai.pve_log.ssh_exec import confirm_exec as _confirm_exec
+
+    try:
+        return await _confirm_exec(request)
+    except Exception as exc:
+        logger.exception("SSH 確認失敗")
+        raise HTTPException(status_code=500, detail=str(exc))
