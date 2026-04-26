@@ -19,6 +19,7 @@ export type ChatResponse = {
 export type SSHConfirmRequest = {
   token: string
   approved: boolean
+  command?: string
 }
 
 export type SSHExecResult = {

@@ -188,3 +188,6 @@ class SSHConfirmRequest(BaseModel):
         default=None, description="相容欄位：可改以 confirm_token 傳入"
     )
     approved: bool = Field(description="是否允許執行")
+    command: str | None = Field(
+        default=None, description="可選：允許前覆寫要執行的指令內容"
+    )

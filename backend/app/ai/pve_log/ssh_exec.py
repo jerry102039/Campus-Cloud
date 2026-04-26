@@ -260,6 +260,26 @@ async def confirm_exec(confirm_req: SSHConfirmRequest) -> SSHExecResult:
             error="使用者已拒絕執行此指令。",
         )
 
+    override_command = (confirm_req.command or "").strip()
+    if override_command:
+        guard = check_command(override_command)
+        if not guard.allowed:
+            logger.warning(
+                "使用者覆寫指令被黑名單攔截 vmid=%d cmd=%r reason=%s",
+                req.vmid,
+                override_command,
+                guard.reason,
+            )
+            return SSHExecResult(
+                vmid=req.vmid,
+                host="",
+                ssh_user=req.ssh_user,
+                command=override_command,
+                blocked=True,
+                block_reason=guard.reason,
+            )
+        req = req.model_copy(update={"command": override_command})
+
     return await _do_exec(req)
 
 

@@ -49,6 +49,7 @@ export function AiPveMessageContent({
   ])
   const [chatHistory, setChatHistory] = useState<Record<string, unknown>[]>([])
   const [pendingTool, setPendingTool] = useState<{ token: string; command: string; reason: string } | null>(null)
+  const [pendingCommand, setPendingCommand] = useState("")
 
   const canSend = useMemo(
     () => input.trim().length > 0 && !isSending && !pendingTool,
@@ -73,11 +74,13 @@ export function AiPveMessageContent({
     if (response.needs_confirmation) {
       const sshTool = response.tools_called?.find((t: any) => t.name === "ssh_exec" && t.result?.pending)
       if (sshTool && sshTool.result?.confirm_token) {
+        const command = (sshTool.args.command as string) || ""
         setPendingTool({
           token: sshTool.result.confirm_token as string,
-          command: sshTool.args.command as string,
+          command,
           reason: (sshTool.args.reason as string) || "執行系統指令",
         })
+        setPendingCommand(command)
       }
     }
   }
@@ -115,16 +118,23 @@ export function AiPveMessageContent({
 
   const handleConfirm = async (approved: boolean) => {
     if (!pendingTool) return
+    const command = pendingCommand.trim()
+    if (approved && !command) {
+      showErrorToast("請先輸入要執行的指令")
+      return
+    }
     setIsSending(true)
 
     try {
       const res = await AiPveLogService.confirmSsh({
         token: pendingTool.token,
         approved,
+        command: approved ? command : undefined,
       })
 
       const currentToken = pendingTool.token
       setPendingTool(null)
+      setPendingCommand("")
 
       if (!approved) {
         setMessages((prev) => [
@@ -235,11 +245,15 @@ export function AiPveMessageContent({
                 </div>
                 <div className="mb-4 space-y-2 text-sm text-foreground/90">
                   <p><strong>目的：</strong>{pendingTool.reason}</p>
-                  <div className="rounded bg-muted p-3 font-mono text-xs text-muted-foreground break-all border border-border">
-                    {pendingTool.command}
-                  </div>
+                  <Textarea
+                    value={pendingCommand}
+                    onChange={(event) => setPendingCommand(event.target.value)}
+                    placeholder="可在此修改後再允許執行"
+                    className="min-h-[88px] resize-y font-mono text-xs"
+                    disabled={isSending}
+                  />
                   <p className="text-xs text-muted-foreground mt-2">
-                    為保護伺服器安全，請確認是否允許執行此操作。
+                    為保護伺服器安全，請確認指令內容後再允許執行。
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -248,7 +262,7 @@ export function AiPveMessageContent({
                     size="sm"
                     className="flex-1 bg-green-600 hover:bg-green-700"
                     onClick={() => handleConfirm(true)}
-                    disabled={isSending}
+                    disabled={isSending || pendingCommand.trim().length === 0}
                   >
                     <Check className="mr-1 h-4 w-4" /> 允許執行
                   </Button>
