@@ -32,7 +32,10 @@ export type SSHExecResult = {
 }
 
 export const AiPveLogService = {
-  chat(data: { message?: string; messages?: Record<string, unknown>[] }): CancelablePromise<ChatResponse> {
+  chat(data: {
+    message?: string
+    messages?: Record<string, unknown>[]
+  }): CancelablePromise<ChatResponse> {
     return __request(OpenAPI, {
       method: "POST",
       url: "/api/v1/ai/pve-log/chat",

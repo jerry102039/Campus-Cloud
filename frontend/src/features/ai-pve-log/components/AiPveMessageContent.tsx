@@ -1,4 +1,12 @@
-import { Bot, MessageSquare, Send, Wrench, AlertTriangle, Check, X } from "lucide-react"
+import {
+  AlertTriangle,
+  Bot,
+  Check,
+  MessageSquare,
+  Send,
+  Wrench,
+  X,
+} from "lucide-react"
 import { type FormEvent, useMemo, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -16,16 +24,18 @@ type LocalMessage = {
 
 /** 清除 Qwen3 殘留的 tool call 標記，避免原始標記顯示在對話框中 */
 function sanitizeContent(text: string): string {
-  return text
-    // <|tool_call>call:func{...}<tool_call|> 或 <|tool_call|>...<|/tool_call|>
-    .replace(/<\|?tool_call\|?>[\s\S]*?<\|?\/?tool_call\|?>/g, "")
-    // 無結尾標記：<|tool_call>call:func{...}
-    .replace(/<\|?tool_call\|?>\s*call:[a-zA-Z0-9_]+\s*\{[\s\S]+\}/g, "")
-    // <think>...</think>
-    .replace(/<think>[\s\S]*?<\/think>/g, "")
-    // 殘留的特殊 token 如 <|"|> <|endoftext|>
-    .replace(/<\|[^>]*\|>/g, "")
-    .trim()
+  return (
+    text
+      // <|tool_call>call:func{...}<tool_call|> 或 <|tool_call|>...<|/tool_call|>
+      .replace(/<\|?tool_call\|?>[\s\S]*?<\|?\/?tool_call\|?>/g, "")
+      // 無結尾標記：<|tool_call>call:func{...}
+      .replace(/<\|?tool_call\|?>\s*call:[a-zA-Z0-9_]+\s*\{[\s\S]+\}/g, "")
+      // <think>...</think>
+      .replace(/<think>[\s\S]*?<\/think>/g, "")
+      // 殘留的特殊 token 如 <|"|> <|endoftext|>
+      .replace(/<\|[^>]*\|>/g, "")
+      .trim()
+  )
 }
 
 /**
@@ -48,7 +58,11 @@ export function AiPveMessageContent({
     },
   ])
   const [chatHistory, setChatHistory] = useState<Record<string, unknown>[]>([])
-  const [pendingTool, setPendingTool] = useState<{ token: string; command: string; reason: string } | null>(null)
+  const [pendingTool, setPendingTool] = useState<{
+    token: string
+    command: string
+    reason: string
+  } | null>(null)
   const [pendingCommand, setPendingCommand] = useState("")
 
   const canSend = useMemo(
@@ -61,7 +75,7 @@ export function AiPveMessageContent({
       showErrorToast(response.error)
     }
     setChatHistory(response.messages || [])
-    
+
     setMessages((prev) => [
       ...prev,
       {
@@ -72,8 +86,10 @@ export function AiPveMessageContent({
     ])
 
     if (response.needs_confirmation) {
-      const sshTool = response.tools_called?.find((t: any) => t.name === "ssh_exec" && t.result?.pending)
-      if (sshTool && sshTool.result?.confirm_token) {
+      const sshTool = response.tools_called?.find(
+        (t: any) => t.name === "ssh_exec" && t.result?.pending,
+      )
+      if (sshTool?.result?.confirm_token) {
         const command = (sshTool.args.command as string) || ""
         setPendingTool({
           token: sshTool.result.confirm_token as string,
@@ -94,14 +110,14 @@ export function AiPveMessageContent({
     setIsSending(true)
     setMessages((prev) => [...prev, { role: "user", content: message }])
 
-    let newHistory = [...chatHistory]
+    const newHistory = [...chatHistory]
     if (newHistory.length > 0) {
       newHistory.push({ role: "user", content: message })
     }
 
     try {
       const response = await AiPveLogService.chat(
-        newHistory.length > 0 ? { messages: newHistory } : { message }
+        newHistory.length > 0 ? { messages: newHistory } : { message },
       )
       handleChatResponse(response)
     } catch (err: any) {
@@ -151,7 +167,7 @@ export function AiPveMessageContent({
         (m) =>
           m.role === "tool" &&
           typeof m.content === "string" &&
-          m.content.includes(currentToken)
+          m.content.includes(currentToken),
       )
 
       if (targetIdx !== -1) {
@@ -236,7 +252,7 @@ export function AiPveMessageContent({
                 )}
               </div>
             ))}
-            
+
             {pendingTool && (
               <div className="mr-8 rounded-xl border border-destructive/20 bg-destructive/5 p-5 shadow-sm">
                 <div className="flex items-center gap-2 text-destructive mb-3 font-semibold">
@@ -244,7 +260,10 @@ export function AiPveMessageContent({
                   AI 請求執行安全指令
                 </div>
                 <div className="mb-4 space-y-2 text-sm text-foreground/90">
-                  <p><strong>目的：</strong>{pendingTool.reason}</p>
+                  <p>
+                    <strong>目的：</strong>
+                    {pendingTool.reason}
+                  </p>
                   <Textarea
                     value={pendingCommand}
                     onChange={(event) => setPendingCommand(event.target.value)}

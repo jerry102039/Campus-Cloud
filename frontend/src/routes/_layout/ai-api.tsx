@@ -529,10 +529,7 @@ function MyUsageTab() {
       </div>
 
       {/* Proxy usage */}
-      <Panel
-        title="Proxy 用量"
-        description="直接呼叫 AI API 的 Token 用量。"
-      >
+      <Panel title="Proxy 用量" description="直接呼叫 AI API 的 Token 用量。">
         {proxyQuery.isLoading ? (
           <div className="text-sm text-muted-foreground">載入中…</div>
         ) : proxyQuery.isError ? (
