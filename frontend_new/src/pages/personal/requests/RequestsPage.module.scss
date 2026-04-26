@@ -103,7 +103,7 @@
 /* ── Request grid ── */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: $spacing-16;
 }
 
@@ -118,7 +118,7 @@
 
   &:hover {
     box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
+    transform: translateY(-5px);
   }
 }
 
@@ -157,26 +157,96 @@
   color: var(--color-text-muted);
 }
 
-/* ── Spec grid ── */
-.specGrid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+/* ── Type / VMID chips under hostname ── */
+.cardChips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.typeChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: $radius-pill;
+  font-size: $font-size-12;
+  font-weight: $font-weight-500;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+}
+
+.vmidChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: $radius-pill;
+  font-size: $font-size-12;
+  font-weight: $font-weight-500;
+  background: var(--color-hover);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Info rows ── */
+.cardInfo {
+  @include flex-column;
+  gap: 5px;
+  padding: $spacing-8 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.infoRow {
+  display: flex;
+  align-items: baseline;
+  gap: $spacing-8;
+  min-width: 0;
+}
+
+.infoLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: $font-size-12;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  width: 72px;
+}
+
+.infoValue {
+  flex: 1;
+  font-size: $font-size-12;
+  color: var(--color-text);
+  min-width: 0;
+  @include text-truncate;
+}
+
+/* ── Spec chips row ── */
+.specRow {
+  display: flex;
+  flex-wrap: wrap;
   gap: $spacing-8;
 }
 
-.specItem {
-  @include flex-column;
-  gap: 2px;
+.specChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: $radius-8;
+  background: var(--color-hover);
 }
 
-.specLabel {
+.specChipLabel {
   font-size: $font-size-12;
-  color: var(--color-text-muted);
+  color: var(--color-text-primary);
 }
 
-.specValue {
-  font-size: $font-size-14;
-  font-weight: $font-weight-500;
+.specChipValue {
+  font-size: $font-size-12;
+  font-weight: $font-weight-700;
   color: var(--color-text);
 }
 
@@ -184,8 +254,17 @@
 .cardFooter {
   @include flex-between;
   align-items: center;
+  gap: $spacing-8;
   padding-top: $spacing-8;
+  margin-top: $spacing-8;
   border-top: 1px solid var(--color-border);
+}
+
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-8;
+  flex-shrink: 0;
 }
 
 .cardDate {
@@ -221,7 +300,169 @@
 .badge_success { background: color-mix(in srgb, #28a745 12%, transparent); color: #28a745; }
 .badge_warning { background: color-mix(in srgb, #ffc107 16%, transparent); color: #9a7500; }
 .badge_danger  { background: color-mix(in srgb, #dc3545 12%, transparent); color: #dc3545; }
+.badge_info    { background: color-mix(in srgb, #0891b2 12%, transparent); color: #0891b2; }
 .badge_muted   { background: var(--color-hover); color: var(--color-text-muted); }
+
+/* ── Card period ── */
+.cardPeriod {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: $font-size-12;
+  color: var(--color-text-secondary);
+}
+
+/* ── Review comment ── */
+.reviewComment {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 8px 12px;
+  border-radius: $radius-8;
+  background: color-mix(in srgb, #dc3545 8%, transparent);
+  color: #dc3545;
+  font-size: $font-size-12;
+  line-height: $line-height-base;
+}
+
+/* ── Confirm Modal ── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay);
+  z-index: 200;
+  @include flex-center;
+  padding: $spacing-16;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn  { from { opacity: 0; } to   { opacity: 1; } }
+@keyframes fadeOut { from { opacity: 1; } to   { opacity: 0; } }
+
+.modalOverlayOut { animation: fadeOut 0.15s ease forwards; }
+
+.modal {
+  width: 100%;
+  max-width: 400px;
+  @include glass-surface;
+  border-radius: $radius-16;
+  padding: $spacing-24;
+  @include flex-column;
+  gap: $spacing-16;
+  animation: slideUp 0.18s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.modalTitle {
+  font-size: $font-size-16;
+  font-weight: $font-weight-700;
+  color: var(--color-text-primary);
+}
+
+.modalDesc {
+  font-size: $font-size-14;
+  color: var(--color-text-secondary);
+  line-height: $line-height-base;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: $spacing-8;
+}
+
+.btnDanger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px $spacing-16;
+  border-radius: $radius-8;
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
+  cursor: pointer;
+  white-space: nowrap;
+  background: #dc3545;
+  color: #fff;
+  border: 1px solid #dc3545;
+  transition: background $transition-base;
+
+  &:hover:not(:disabled) { background: #b91c1c; border-color: #b91c1c; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+/* ── Card action buttons ── */
+%cardBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: $radius-8;
+  font-size: 13px;
+  font-weight: $font-weight-500;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid var(--color-border);
+  transition: background $transition-base, border-color $transition-base;
+}
+
+.cardCancelBtn {
+  @extend %cardBtn;
+  background: color-mix(in srgb, #dc3545 80%, var(--color-border));
+  color: var(--color-text-on-primary);
+  border-color: color-mix(in srgb, #dc3545 80%, var(--color-border));
+
+  &:hover {
+    background: color-mix(in srgb, #dc3545 12%, transparent);
+    color: color-mix(in srgb, #dc3545 80%, var(--color-border));;
+    border-color: color-mix(in srgb, #dc3545 40%, var(--color-border));
+  }
+}
+
+
+/* ── Empty error tint ── */
+.emptyIconError {
+  color: var(--color-danger, #dc3545);
+  background: color-mix(in srgb, #dc3545 8%, transparent);
+}
+
+/* ── Skeleton ── */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-hover) 25%,
+    color-mix(in srgb, var(--color-text-secondary) 8%, var(--color-hover)) 50%,
+    var(--color-hover) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skRow     { border-radius: 4px; }
+.skBadge   { width: 60px; height: 22px; border-radius: $radius-pill; }
+.skChip    { width: 72px; height: 30px; border-radius: $radius-8; }
+.skInfoRow { display: flex; align-items: center; gap: $spacing-8; }
+
+/* ── Retry button ── */
+.retryBtn {
+  @extend %cardBtn;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:not(:disabled):hover { background: var(--color-hover); }
+}
 
 /* ── Page transition animations ── */
 @keyframes slideInRight {
