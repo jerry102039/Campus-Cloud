@@ -1,3 +1,5 @@
 """AI infrastructure adapters."""
 
-__all__: list[str] = []
+from app.infrastructure.ai.vllm_client import VLLMClient as VLLMClient
+
+__all__ = ["VLLMClient"]

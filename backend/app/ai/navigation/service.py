@@ -16,6 +16,7 @@ from app.ai.navigation.schemas import (
     NavigationTarget,
 )
 from app.ai.system_config import system_ai_env
+from app.ai.utils import strip_think_tags
 from app.infrastructure.ai.navigation import client as navigation_client
 from app.models import User
 
@@ -24,14 +25,6 @@ logger = logging.getLogger(__name__)
 _DEFAULT_TIMEOUT_SECONDS = 20.0
 _DEFAULT_MAX_TOKENS = 450
 _DEFAULT_TEMPERATURE = 0.1
-
-
-def _strip_think_tags(text: str) -> str:
-    marker = "</think>"
-    idx = text.find(marker)
-    if idx != -1:
-        return text[idx + len(marker) :].strip()
-    return text.strip()
 
 
 def _extract_first_json_object(text: str) -> str | None:
@@ -217,7 +210,7 @@ async def resolve_navigation(query: str, current_user: User) -> NavigationResolv
             timeout=_DEFAULT_TIMEOUT_SECONDS,
         )
         content = str(response_data["choices"][0]["message"]["content"] or "")
-        normalized_text = _strip_think_tags(content)
+        normalized_text = strip_think_tags(content)
         raw_json = _extract_first_json_object(normalized_text)
         if not raw_json:
             logger.warning("Navigation model returned non-JSON text, using keyword fallback")

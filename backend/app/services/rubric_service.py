@@ -12,6 +12,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.ai.teacher_judge.config import settings
+from app.ai.utils import apply_thinking_control, strip_think_tags
 from app.schemas.rubric import ChatMessage, RubricAnalysis, RubricItem
 
 logger = logging.getLogger(__name__)
@@ -46,21 +47,6 @@ async def close_http_client() -> None:
 # ──────────────────────────────────────────────────────────────
 # Shared helpers
 # ──────────────────────────────────────────────────────────────
-
-
-def _strip_think_tags(text: str) -> str:
-    """Keep only content after </think>; return text as-is if tag absent."""
-    marker = "</think>"
-    idx = text.find(marker)
-    return text[idx + len(marker) :].strip() if idx != -1 else text.strip()
-
-
-def _apply_thinking_control(payload: dict[str, Any]) -> dict[str, Any]:
-    payload["chat_template_kwargs"] = {
-        **dict(payload.get("chat_template_kwargs") or {}),
-        "enable_thinking": settings.VLLM_ENABLE_THINKING,
-    }
-    return payload
 
 
 def _vllm_headers() -> dict[str, str]:
@@ -171,7 +157,7 @@ async def _call_vllm(
         )
 
         content = data["choices"][0]["message"]["content"] or ""
-        content = _strip_think_tags(content)
+        content = strip_think_tags(content)
         metrics = {
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
@@ -261,7 +247,7 @@ async def analyze_rubric(raw_text: str) -> tuple[RubricAnalysis, dict]:
 
     user_content = f"# 評分表原文\n\n{raw_text}"
 
-    payload = _apply_thinking_control(
+    payload = apply_thinking_control(
         {
             "model": settings.VLLM_MODEL_NAME,
             "messages": [
@@ -272,7 +258,8 @@ async def analyze_rubric(raw_text: str) -> tuple[RubricAnalysis, dict]:
             "temperature": 0.2,
             "top_p": settings.VLLM_TOP_P,
             "response_format": {"type": "json_object"},
-        }
+        },
+        settings.VLLM_ENABLE_THINKING,
     )
 
     content, metrics = await _call_vllm(
@@ -520,7 +507,7 @@ async def chat_with_rubric(
     for msg in messages:
         formatted.append({"role": msg.role, "content": msg.content})
 
-    payload = _apply_thinking_control(
+    payload = apply_thinking_control(
         {
             "model": settings.VLLM_MODEL_NAME,
             "messages": formatted,
@@ -530,7 +517,8 @@ async def chat_with_rubric(
             "top_k": settings.VLLM_TOP_K,
             "repetition_penalty": settings.VLLM_REPETITION_PENALTY,
             "response_format": {"type": "json_object"},
-        }
+        },
+        settings.VLLM_ENABLE_THINKING,
     )
 
     content, metrics = await _call_vllm(

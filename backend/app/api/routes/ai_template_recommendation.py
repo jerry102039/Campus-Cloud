@@ -34,6 +34,7 @@ from app.infrastructure.ai.template_recommendation import client
 from app.repositories import vm_request as vm_request_repo
 from app.services.llm_gateway import ai_gateway_service
 from app.services.proxmox import gpu_service
+from app.ai.utils import apply_thinking_control, strip_think_tags
 
 logger = logging.getLogger(__name__)
 
@@ -46,20 +47,7 @@ router = APIRouter(
 )
 
 
-def _strip_think_tags(text: str) -> str:
-    marker = "</think>"
-    idx = text.find(marker)
-    if idx != -1:
-        return text[idx + len(marker) :].strip()
-    return text.strip()
 
-
-def _apply_thinking_control(payload: dict[str, Any]) -> dict[str, Any]:
-    payload["chat_template_kwargs"] = {
-        **dict(payload.get("chat_template_kwargs") or {}),
-        "enable_thinking": settings.vllm_enable_thinking,
-    }
-    return payload
 
 
 def _latest_user_text(request: ChatRequest) -> str:
@@ -189,7 +177,7 @@ async def chat(
     for msg in request.messages:
         messages.append({"role": msg.role, "content": msg.content})
 
-    payload = _apply_thinking_control(
+    payload = apply_thinking_control(
         {
             "model": model_name,
             "messages": messages,
@@ -199,7 +187,8 @@ async def chat(
             "top_k": settings.vllm_top_k,
             "min_p": settings.vllm_min_p,
             "repetition_penalty": settings.vllm_repetition_penalty,
-        }
+        },
+        settings.vllm_enable_thinking,
     )
 
     try:
@@ -215,7 +204,7 @@ async def chat(
         )
         duration_ms = int(elapsed_seconds * 1000)
 
-        content = _strip_think_tags(data["choices"][0]["message"]["content"] or "")
+        content = strip_think_tags(data["choices"][0]["message"]["content"] or "")
 
         # 記錄 template chat 呼叫
         try:

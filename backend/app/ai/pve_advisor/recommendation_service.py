@@ -12,6 +12,7 @@ from typing import Any, cast
 from sqlmodel import Session, func, select
 
 from app.ai.pve_advisor.config import settings
+from app.ai.utils import apply_thinking_control, safe_int, strip_think_tags
 from app.ai.pve_advisor.prompt import (
     build_advisor_system_prompt,
     build_advisor_user_prompt,
@@ -210,7 +211,7 @@ async def _generate_ai_decision(
     audit_signals: _AuditSignalSnapshot,
     node_capacities: list[NodeCapacity],
 ) -> tuple[dict[str, Any], AiMetrics]:
-    payload = _apply_thinking_control(
+    payload = apply_thinking_control(
         {
             "model": settings.resolved_vllm_model_name,
             "messages": [
@@ -233,7 +234,8 @@ async def _generate_ai_decision(
             "min_p": settings.vllm_min_p,
             "repetition_penalty": settings.vllm_repetition_penalty,
             "response_format": {"type": "json_object"},
-        }
+        },
+        settings.vllm_enable_thinking,
     )
 
     started_at = perf_counter()
@@ -243,7 +245,7 @@ async def _generate_ai_decision(
     prompt_tokens = int(usage.get("prompt_tokens") or 0)
     completion_tokens = int(usage.get("completion_tokens") or 0)
     total_tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
-    content = _strip_think_tags(str(data["choices"][0]["message"]["content"] or ""))
+    content = strip_think_tags(str(data["choices"][0]["message"]["content"] or ""))
 
     return json.loads(content), AiMetrics(
         prompt_tokens=prompt_tokens,
@@ -312,7 +314,7 @@ def _build_ai_plan_from_decision(
             return None
 
         node = str(item.get("node") or "").strip()
-        instance_count = _safe_int(item.get("instance_count"), minimum=0)
+        instance_count = safe_int(item.get("instance_count"), minimum=0)
         reason = str(item.get("reason") or "").strip()
         if not node or instance_count <= 0:
             continue
@@ -408,20 +410,7 @@ def _build_ai_plan_from_decision(
     )
 
 
-def _strip_think_tags(text: str) -> str:
-    marker = "</think>"
-    idx = text.find(marker)
-    if idx != -1:
-        return text[idx + len(marker) :].strip()
-    return text.strip()
 
-
-def _apply_thinking_control(payload: dict[str, Any]) -> dict[str, Any]:
-    payload["chat_template_kwargs"] = {
-        **dict(payload.get("chat_template_kwargs") or {}),
-        "enable_thinking": settings.vllm_enable_thinking,
-    }
-    return payload
 
 
 def _load_cluster_state() -> tuple[list[NodeSnapshot], list[ResourceSnapshot]]:
@@ -1038,14 +1027,6 @@ def _ratio(used: int, total: int) -> float:
     if total <= 0:
         return 0.0
     return max(float(used) / float(total), 0.0)
-
-
-def _safe_int(value: object, *, minimum: int = 0) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        parsed = minimum
-    return max(parsed, minimum)
 
 
 def _optional_int(value: object) -> int | None:
