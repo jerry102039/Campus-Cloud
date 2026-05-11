@@ -195,7 +195,7 @@ def _build_submission_reason(
 
 
 async def extract_intent_from_chat(request: ChatRequest) -> ExtractedIntent:
-    model_name = settings.resolved_vllm_model_name
+    model_name = settings.VLLM_MODEL_NAME
     if not model_name:
         raise HTTPException(
             status_code=503,
@@ -220,14 +220,14 @@ async def extract_intent_from_chat(request: ChatRequest) -> ExtractedIntent:
         user_signal_flags=_extract_user_signal_flags(recent_messages),
     )
     payload = apply_thinking_control(
-        settings.vllm_enable_thinking,
         {
             "model": model_name,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 1024,
             "temperature": 0.1,
             "response_format": {"type": "json_object"},
-        }
+        },
+        settings.VLLM_ENABLE_THINKING,
     )
 
     try:
@@ -245,7 +245,7 @@ async def generate_ai_plan(
     *,
     resource_options: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    model_name = settings.resolved_vllm_model_name
+    model_name = settings.VLLM_MODEL_NAME
     if not model_name:
         raise HTTPException(
             status_code=503,
@@ -349,7 +349,6 @@ async def generate_ai_plan(
         "upgrade_when": "Traditional Chinese upgrade timing with measurable thresholds",
     }
     payload = apply_thinking_control(
-        settings.vllm_enable_thinking,
         {
             "model": model_name,
             "messages": [
@@ -367,15 +366,16 @@ async def generate_ai_plan(
                     ),
                 }
             ],
-            "max_tokens": settings.vllm_max_tokens,
-            "temperature": settings.vllm_temperature,
-            "top_p": settings.vllm_top_p,
-            "top_k": settings.vllm_top_k,
-            "min_p": settings.vllm_min_p,
-            "presence_penalty": settings.vllm_presence_penalty,
-            "repetition_penalty": settings.vllm_repetition_penalty,
+            "max_tokens": settings.VLLM_MAX_TOKENS,
+            "temperature": settings.VLLM_TEMPERATURE,
+            "top_p": settings.VLLM_TOP_P,
+            "top_k": settings.VLLM_TOP_K,
+            "min_p": settings.VLLM_MIN_P,
+            "presence_penalty": settings.VLLM_PRESENCE_PENALTY,
+            "repetition_penalty": settings.VLLM_REPETITION_PENALTY,
             "response_format": {"type": "json_object"},
-        }
+        },
+        settings.VLLM_ENABLE_THINKING,
     )
 
     try:

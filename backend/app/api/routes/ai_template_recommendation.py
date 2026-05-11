@@ -143,7 +143,7 @@ def _resolve_chat_gpu_options(request: ChatRequest, session: SessionDep) -> list
 async def chat(
     request: ChatRequest, current_user: CurrentUser, session: SessionDep
 ) -> ChatResponse:
-    model_name = settings.resolved_vllm_model_name
+    model_name = settings.VLLM_MODEL_NAME
     if not model_name:
         raise HTTPException(
             status_code=503,
@@ -181,14 +181,14 @@ async def chat(
         {
             "model": model_name,
             "messages": messages,
-            "max_tokens": settings.vllm_chat_max_tokens,
-            "temperature": settings.vllm_chat_temperature,
-            "top_p": settings.vllm_top_p,
-            "top_k": settings.vllm_top_k,
-            "min_p": settings.vllm_min_p,
-            "repetition_penalty": settings.vllm_repetition_penalty,
+            "max_tokens": settings.VLLM_CHAT_MAX_TOKENS,
+            "temperature": settings.VLLM_CHAT_TEMPERATURE,
+            "top_p": settings.VLLM_TOP_P,
+            "top_k": settings.VLLM_TOP_K,
+            "min_p": settings.VLLM_MIN_P,
+            "repetition_penalty": settings.VLLM_REPETITION_PENALTY,
         },
-        settings.vllm_enable_thinking,
+        settings.VLLM_ENABLE_THINKING,
     )
 
     try:
@@ -251,7 +251,7 @@ async def chat(
 async def recommend(
     request: ChatRequest, current_user: CurrentUser, session: SessionDep
 ) -> dict[str, Any]:
-    model_name = settings.resolved_vllm_model_name or "unknown"
+    model_name = settings.VLLM_MODEL_NAME or "unknown"
     started_at = perf_counter()
 
     live_nodes = load_live_device_nodes()

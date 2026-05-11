@@ -155,7 +155,7 @@ async def generate_recommendation(
     )
     current_status = _build_current_status(node_capacities)
 
-    model_name = settings.resolved_vllm_model_name
+    model_name = settings.VLLM_MODEL_NAME
     if not model_name:
         return _build_response_from_plan(
             plan=rule_based_plan,
@@ -213,7 +213,7 @@ async def _generate_ai_decision(
 ) -> tuple[dict[str, Any], AiMetrics]:
     payload = apply_thinking_control(
         {
-            "model": settings.resolved_vllm_model_name,
+            "model": settings.VLLM_MODEL_NAME,
             "messages": [
                 {"role": "system", "content": build_advisor_system_prompt()},
                 {
@@ -227,15 +227,15 @@ async def _generate_ai_decision(
                     ),
                 },
             ],
-            "max_tokens": settings.vllm_max_tokens,
-            "temperature": settings.vllm_temperature,
-            "top_p": settings.vllm_top_p,
-            "top_k": settings.vllm_top_k,
-            "min_p": settings.vllm_min_p,
-            "repetition_penalty": settings.vllm_repetition_penalty,
+            "max_tokens": settings.VLLM_MAX_TOKENS,
+            "temperature": settings.VLLM_TEMPERATURE,
+            "top_p": settings.VLLM_TOP_P,
+            "top_k": settings.VLLM_TOP_K,
+            "min_p": settings.VLLM_MIN_P,
+            "repetition_penalty": settings.VLLM_REPETITION_PENALTY,
             "response_format": {"type": "json_object"},
         },
-        settings.vllm_enable_thinking,
+        settings.VLLM_ENABLE_THINKING,
     )
 
     started_at = perf_counter()
