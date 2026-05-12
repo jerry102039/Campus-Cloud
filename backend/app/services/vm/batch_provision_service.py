@@ -247,6 +247,7 @@ def _process_task(*, job_id: uuid.UUID, task_id: uuid.UUID) -> None:
                 user_id=user_id,
                 params=params,
                 start=start_on_create,
+                batch_job_id=job_id,
             )
 
         with Session(engine) as session:
@@ -273,6 +274,7 @@ def _provision_one(
     user_id: uuid.UUID,
     params: dict,
     start: bool = True,
+    batch_job_id: uuid.UUID | None = None,
 ) -> int:
     """呼叫 provisioning_service 建立單一資源，回傳 vmid。"""
     if resource_type == "lxc":
@@ -291,7 +293,7 @@ def _provision_one(
             unprivileged=True,
         )
         result = provisioning_service.create_lxc(
-            session=session, lxc_data=req, user_id=user_id
+            session=session, lxc_data=req, user_id=user_id, batch_job_id=batch_job_id
         )
     else:
         req = VMCreateRequest(
@@ -309,7 +311,7 @@ def _provision_one(
             start=start,
         )
         result = provisioning_service.create_vm(
-            session=session, vm_data=req, user_id=user_id
+            session=session, vm_data=req, user_id=user_id, batch_job_id=batch_job_id
         )
 
     return result.vmid

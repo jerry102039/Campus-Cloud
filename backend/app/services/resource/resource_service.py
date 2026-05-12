@@ -635,7 +635,7 @@ def get_session_status(
     expiry_at: datetime | None = None
     hours_until_expiry: int | None = None
     expiry_warn = False
-    if running and resource and resource.expiry_date:
+    if running and resource and resource.expiry_date and resource.batch_job_id is None:
         # Treat the expiry date as the END of that day in UTC (00:00 of the
         # following day) so resources stay valid through their full last day.
         expiry_at = datetime.combine(
